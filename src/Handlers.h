@@ -1,0 +1,26 @@
+#pragma once
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <windows.h>
+#include "EuroScopePlugIn.h"
+#include <string>
+
+namespace edb {
+
+// ============================================================================
+// HandleRequest — route an incoming WebSocket JSON request to the appropriate
+//                  ES query/setter function.
+//
+// Called from the EuroScope main thread (via OnTimer). Thread-safe.
+//
+// Returns the JSON response string. Empty string means no response needed.
+// ============================================================================
+std::string HandleRequest(EuroScopePlugIn::CPlugIn& plugin, const std::string& requestJson);
+
+} // namespace edb

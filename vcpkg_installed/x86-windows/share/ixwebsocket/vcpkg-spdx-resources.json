@@ -1,0 +1,19 @@
+{
+  "packages": [
+{
+  "SPDXID" : "SPDXRef-resource-0",
+  "checksums" : 
+  [
+    {
+      "algorithm" : "SHA512",
+      "checksumValue" : "ef8fa2732d8f59cd335cb97306d05cd7f2373aa6686aab6c4eebdf687301ce51728fc01b06632bfc616aeaadc61c7eb4fcc4100fbc38fce6b6abed189c7a3579"
+    }
+  ],
+  "copyrightText" : "NOASSERTION",
+  "downloadLocation" : "git+https://github.com/machinezone/IXWebSocket@v12.0.1",
+  "licenseConcluded" : "NOASSERTION",
+  "licenseDeclared" : "NOASSERTION",
+  "name" : "machinezone/IXWebSocket"
+}
+  ]
+}

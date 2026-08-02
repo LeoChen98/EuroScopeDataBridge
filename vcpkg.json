@@ -1,0 +1,9 @@
+{
+  "name": "euroscope-data-bridge",
+  "version": "1.0.0",
+  "description": "EuroScope plugin DLL exposing WebSocket API for external data access",
+  "dependencies": [
+    "ixwebsocket",
+    "nlohmann-json"
+  ]
+}

@@ -402,3 +402,12 @@ FodyWeavers.xsd
 
 # EuroScopePlugIn files
 EuroScopePlugIn/
+
+# Kun workspace files
+.kunsdd/
+
+# vcpkg package manager
+vcpkg/
+
+# External dependencies (fetched from GitHub)
+include/

@@ -72,7 +72,7 @@ bool JBool(const json& data, const char* key, bool defaultVal = false)
 namespace edb {
 
 // ============================================================================
-// HandleRequest — main dispatch
+// HandleRequest - main dispatch
 // ============================================================================
 
 std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
@@ -120,7 +120,12 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
             CFlightPlan fp = plugin.FlightPlanSelectFirst();
             while (fp.IsValid())
             {
-                result.push_back(json::parse(SerializeFlightPlanToJson(fp)));
+                try {
+                    result.push_back(json::parse(SerializeFlightPlanToJson(fp)));
+                }
+                catch (...) {
+                }
+
                 fp = plugin.FlightPlanSelectNext(fp);
             }
         }
@@ -208,8 +213,53 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         return MakeSuccess(id, result.dump());
     }
 
+    if (type == msg_type::GET_FULL_SNAPSHOT)
+    {
+        json result;
+        result["flightplans"] = json::array();
+        result["radar_targets"] = json::array();
+        result["controllers"] = json::array();
+
+        // Iterate all flight plans
+        CFlightPlan fp = plugin.FlightPlanSelectFirst();
+        while (fp.IsValid())
+        {
+            std::string fpJson = SerializeFlightPlanToJson(fp);
+            result["flightplans"].push_back(json::parse(fpJson));
+            fp = plugin.FlightPlanSelectNext(fp);
+        }
+
+        // Iterate all radar targets
+        CRadarTarget rt = plugin.RadarTargetSelectFirst();
+        while (rt.IsValid())
+        {
+            std::string rtJson = SerializeRadarTargetToJson(rt);
+            result["radar_targets"].push_back(json::parse(rtJson));
+            rt = plugin.RadarTargetSelectNext(rt);
+        }
+
+        // Iterate all controllers
+        CController ctr = plugin.ControllerSelectFirst();
+        while (ctr.IsValid())
+        {
+            std::string ctrJson = SerializeControllerToJson(ctr);
+            result["controllers"].push_back(json::parse(ctrJson));
+            ctr = plugin.ControllerSelectNext(ctr);
+        }
+
+        // Include self
+        CController myself = plugin.ControllerMyself();
+        if (myself.IsValid())
+        {
+            std::string myJson = SerializeControllerToJson(myself);
+            result["controllers"].push_back(json::parse(myJson));
+        }
+
+        return MakeSuccess(id, result.dump());
+    }
+
     // ========================================================================
-    // Setter Handlers — ControllerAssignedData (via FP)
+    // Setter Handlers - ControllerAssignedData (via FP)
     // ========================================================================
 
     if (callsign.empty() && type.rfind("set_", 0) == 0 && type != msg_type::SET_ASEL)
@@ -313,7 +363,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
     }
 
     // ========================================================================
-    // Setter Handlers — FlightPlanData setters
+    // Setter Handlers - FlightPlanData setters
     // ========================================================================
 
     if (type == msg_type::SET_PLAN_TYPE)
@@ -519,12 +569,18 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         return MakeSuccess(id);
     }
 
-    if (type == msg_type::CLEAR_ESTIMATION)
-    {
-        // ClearEstimation is declared but not exported by this EuroScope SDK version.
-        // Return an error to the client.
-        return MakeError(id, "clear_estimation is not supported by this EuroScope version");
-    }
+     if (type == msg_type::CLEAR_ESTIMATION)
+     {
+         //CFlightPlan fp = lookupFp(callsign);
+         //if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
+         //std::string point = JStr(data, "point");
+         //if (point.empty())
+         //    fp.ClearEstimation();
+         //else
+         //    fp.ClearEstimation(point.c_str());
+         //return MakeSuccess(id);
+         MakeError(id,"SDK version not supported.");
+     }
 
     if (type == msg_type::SET_FLIGHT_STRIP_ANNOTATION)
     {
@@ -638,7 +694,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         // the bridge returns false to let EuroScope handle it.
         // We send the result back.
         // Actually, EuroScope calls OnCompileCommand on the plugin when a command
-        // is typed — we can't programmatically "send" a command. But we return
+        // is typed - we can't programmatically "send" a command. But we return
         // a response indicating the command was noted.
         json result;
         result["command"] = cmd;

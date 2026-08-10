@@ -1,4 +1,0 @@
-LIBRARY EuroscopeDataBridge
-EXPORTS
-    EuroScopePlugInInit
-    EuroScopePlugInExit

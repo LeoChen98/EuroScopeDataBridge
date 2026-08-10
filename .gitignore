@@ -400,14 +400,22 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
-# EuroScopePlugIn files
-EuroScopePlugIn/
-
 # Kun workspace files
 .kunsdd/
+.kun-canvas/
+.agents/
 
 # vcpkg package manager
 vcpkg/
+vcpkg_installed/
 
-# External dependencies (fetched from GitHub)
-include/
+# External dependencies (third-party SDK/headers)
+third_party/
+
+# EuroScope running files
+SectorFileProviderDescriptor.txt
+ipaddr.txt
+version.txt
+
+# Third-party sentry configuration files
+.sentry-native/

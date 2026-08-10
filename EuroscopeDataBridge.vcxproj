@@ -37,38 +37,42 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
-      <SDLCheck>false</SDLCheck>
-      <PreprocessorDefinitions>_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>false</ConformanceMode>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile />
-      <AdditionalIncludeDirectories>$(SolutionDir)EuroScopePlugIn;$(SolutionDir)src;$(SolutionDir)vcpkg_installed\x86-windows\include;$(SolutionDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)third_party\EuroScopePlugIn;$(SolutionDir)src;$(SolutionDir)third_party;$(SolutionDir)vcpkg_installed\x86-windows\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>Default</LanguageStandard>
     </ClCompile>
+    <ResourceCompile>
+      <AdditionalIncludeDirectories>$(SolutionDir)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <ModuleDefinitionFile>$(SolutionDir)EuroscopeDataBridge.def</ModuleDefinitionFile>
-      <AdditionalDependencies>$(SolutionDir)EuroScopePlugIn\EuroScopePlugInDll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ModuleDefinitionFile>
+      </ModuleDefinitionFile>
+      <AdditionalDependencies>$(SolutionDir)third_party\EuroScopePlugIn\EuroScopePlugInDll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
     <ClCompile>
-      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <Optimization>Disabled</Optimization>
+      <TreatWChar_tAsBuiltInType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</TreatWChar_tAsBuiltInType>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>ixwebsocket.lib;mbedtls.lib;mbedx509.lib;mbedcrypto.lib;everest.lib;p256m.lib;zd.lib;ws2_32.lib;crypt32.lib;bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)vcpkg_installed\x86-windows\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>third_party\EuroScopePlugIn\EuroScopePlugInDll.lib;ws2_32.lib;rpcrt4.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <EnableUAC Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</EnableUAC>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
     <ClCompile>
-      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <Optimization>MaxSpeed</Optimization>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>ixwebsocket.lib;mbedtls.lib;mbedx509.lib;mbedcrypto.lib;everest.lib;p256m.lib;z.lib;ws2_32.lib;crypt32.lib;bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)vcpkg_installed\x86-windows\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>ws2_32.lib;rpcrt4.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -79,16 +83,17 @@
     <ClCompile Include="src\Handlers.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\dllmain.h" />
     <ClInclude Include="src\Constants.h" />
     <ClInclude Include="src\Plugin.h" />
     <ClInclude Include="src\WebSocketServer.h" />
     <ClInclude Include="src\ThreadSafeQueue.h" />
     <ClInclude Include="src\Serializer.h" />
     <ClInclude Include="src\Handlers.h" />
-    <ClInclude Include="EuroScopePlugIn\EuroScopePlugIn.h" />
+    <ClInclude Include="third_party\EuroScopePlugIn\EuroScopePlugIn.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="EuroscopeDataBridge.def" />
+    <ResourceCompile Include="src\Resource.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

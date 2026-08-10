@@ -5,6 +5,9 @@
 #include <nlohmann/json.hpp>
 
 #include <iostream>
+#include <string>
+
+
 
 using json = nlohmann::json;
 using namespace edb;
@@ -15,18 +18,42 @@ using namespace EuroScopePlugIn;
 // ============================================================================
 
 DataBridgePlugin::DataBridgePlugin()
-    : CPlugIn(edb::COMPATIBILITY_CODE,
+    : EuroScopePlugIn::CPlugIn(EuroScopePlugIn::COMPATIBILITY_CODE,
               PLUGIN_NAME,
               PLUGIN_VERSION,
               PLUGIN_AUTHOR,
               PLUGIN_COPYRIGHT)
 {
-    m_wsServer = std::make_unique<WebSocketServer>(WS_PORT, m_incomingQueue, m_outgoingQueue);
+    m_wsServer = std::make_unique<WebSocketServer>(WS_PORT, m_incomingQueue);
+
+    // Forward WebSocketServer errors to EuroScope's message area
+    m_wsServer->SetErrorCallback([this](const std::string& msg) {
+        DisplayUserMessage("message", "DataBridge", msg.c_str(), true, false, false, false, false);
+    });
+
+    // Register request processor: called from ES main thread via PostMessage or OnTimer fallback.
+    // Extracts client_id (injected by OnMessage), calls HandleRequest, routes response.
+    m_wsServer->SetRequestProcessor([this](std::string&& requestStr) {
+        std::string clientId;
+        try {
+            json req = json::parse(requestStr);
+            auto it = req.find(json_key::CLIENT_ID);
+            if (it != req.end() && it->is_string())
+                clientId = it->get<std::string>();
+        } catch (const json::parse_error&) { return; }
+
+        std::string response = HandleRequest(*this, requestStr);
+        if (!response.empty())
+            m_wsServer->RouteOutgoing(std::move(response), clientId);
+    });
+
+    DisplayUserMessage("message", "DataBridgePlugin", std::string("Version " + std::string(PLUGIN_VERSION) + " loaded").c_str(), true, false, false, false, false);
 
     if (!m_wsServer->Start())
     {
-        std::cerr << "[DataBridge] WARNING: Plugin loaded but WebSocket server failed to start."
-                  << std::endl;
+        std::string err = "[DataBridge] WARNING: Plugin loaded but WebSocket server failed to start.";
+        std::cerr << err << std::endl;
+        DisplayUserMessage("message", "DataBridge", err.c_str(), true, false, false, false, false);
     }
 }
 
@@ -42,18 +69,32 @@ DataBridgePlugin::~DataBridgePlugin()
 
 void DataBridgePlugin::PushEvent(const char* type, const std::string& dataJson)
 {
-    json msg;
-    msg[json_key::TYPE] = type;
-    msg[json_key::DATA] = json::parse(dataJson.empty() ? "{}" : dataJson);
-    m_outgoingQueue.Push(msg.dump());
+    try {
+        json msg;
+        msg[json_key::TYPE] = type;
+        msg[json_key::DATA] = json::parse(dataJson.empty() ? "{}" : dataJson);
+        m_wsServer->Broadcast(msg.dump());
+    } catch (...) {
+        std::string err = "[DataBridge] Exception in PushEvent(type=";
+        err += type; err += ")";
+        std::cerr << err << std::endl;
+        DisplayUserMessage("message", "DataBridge", err.c_str(), true, false, false, false, false);
+    }
 }
 
 void DataBridgePlugin::PushEvent(const char* type)
 {
-    json msg;
-    msg[json_key::TYPE] = type;
-    msg[json_key::DATA] = json::object();
-    m_outgoingQueue.Push(msg.dump());
+    try {
+        json msg;
+        msg[json_key::TYPE] = type;
+        msg[json_key::DATA] = json::object();
+        m_wsServer->Broadcast(msg.dump());
+    } catch (...) {
+        std::string err = "[DataBridge] Exception in PushEvent(type=";
+        err += type; err += ")";
+        std::cerr << err << std::endl;
+        DisplayUserMessage("message", "DataBridge", err.c_str(), true, false, false, false, false);
+    }
 }
 
 // ============================================================================
@@ -92,7 +133,7 @@ void DataBridgePlugin::OnFlightPlanControllerAssignedDataUpdate(CFlightPlan Flig
     msg[json_key::TYPE] = msg_type::CONTROLLER_ASSIGNED_DATA;
     msg[json_key::DATA] = json::parse(fpJson);
     msg[json_key::DATA]["data_type"] = DataType;
-    m_outgoingQueue.Push(msg.dump());
+    m_wsServer->Broadcast(msg.dump());
 }
 
 void DataBridgePlugin::OnFlightPlanFlightStripPushed(CFlightPlan FlightPlan,
@@ -191,76 +232,20 @@ void DataBridgePlugin::OnAirportRunwayActivityChanged(void)
 
 void DataBridgePlugin::OnTimer(int Counter)
 {
-    // 1. Process incoming WebSocket requests (on ES thread for thread safety)
-    m_incomingQueue.Drain([this](std::string&& requestStr) {
-        std::string response = HandleRequest(*this, requestStr);
-        if (!response.empty())
-        {
-            m_outgoingQueue.Push(std::move(response));
-        }
-    });
+    try {
+    // 1. Process incoming WebSocket requests on the EuroScope main thread
+    m_wsServer->DrainIncomingQueue();
 
-    // 2. Send periodic full snapshot
-    if (Counter % FULL_SNAPSHOT_INTERVAL == 0 && Counter > 0)
-    {
-        SendFullSnapshot();
-    }
-
-    // 3. Send timer event every second
+    // 2. Send timer event every second
     json timerMsg;
     timerMsg[json_key::TYPE] = msg_type::TIMER;
     timerMsg[json_key::DATA][json_key::COUNTER] = Counter;
-    m_outgoingQueue.Push(timerMsg.dump());
+    m_wsServer->Broadcast(timerMsg.dump());
+    } catch (...) {
+        std::string err = "[DataBridge] Exception in OnTimer";
+        std::cerr << err << std::endl;
+        DisplayUserMessage("message", "DataBridge", err.c_str(), true, false, false, false, false);
+    }
 }
 
-// ============================================================================
-// SendFullSnapshot — periodic complete state dump
-// ============================================================================
 
-void DataBridgePlugin::SendFullSnapshot()
-{
-    json snapshot;
-    snapshot[json_key::TYPE] = msg_type::FULL_SNAPSHOT;
-
-    json& data = snapshot[json_key::DATA];
-    data["flightplans"] = json::array();
-    data["radar_targets"] = json::array();
-    data["controllers"] = json::array();
-
-    // Iterate all flight plans
-    CFlightPlan fp = FlightPlanSelectFirst();
-    while (fp.IsValid())
-    {
-        std::string fpJson = SerializeFlightPlanToJson(fp);
-        data["flightplans"].push_back(json::parse(fpJson));
-        fp = FlightPlanSelectNext(fp);
-    }
-
-    // Iterate all radar targets
-    CRadarTarget rt = RadarTargetSelectFirst();
-    while (rt.IsValid())
-    {
-        std::string rtJson = SerializeRadarTargetToJson(rt);
-        data["radar_targets"].push_back(json::parse(rtJson));
-        rt = RadarTargetSelectNext(rt);
-    }
-
-    // Iterate all controllers
-    CController ctr = ControllerSelectFirst();
-    while (ctr.IsValid())
-    {
-        std::string ctrJson = SerializeControllerToJson(ctr);
-        data["controllers"].push_back(json::parse(ctrJson));
-        ctr = ControllerSelectNext(ctr);
-    }
-
-    // Include self
-    CController myself = ControllerMyself();
-    if (myself.IsValid())
-    {
-        std::string myJson = SerializeControllerToJson(myself);
-        data["controllers"].push_back(json::parse(myJson));
-    }
-
-    m_outgoingQueue.Push(snapshot.dump());
-}

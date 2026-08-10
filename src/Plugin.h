@@ -43,49 +43,45 @@ public:
 
     // --- EuroScope Callbacks (Push) ---
 
-    void OnControllerPositionUpdate(EuroScopePlugIn::CController Controller) override;
-    void OnControllerDisconnect(EuroScopePlugIn::CController Controller) override;
+    void OnControllerPositionUpdate(EuroScopePlugIn::CController Controller);
+    void OnControllerDisconnect(EuroScopePlugIn::CController Controller);
 
-    void OnRadarTargetPositionUpdate(EuroScopePlugIn::CRadarTarget RadarTarget) override;
+    void OnRadarTargetPositionUpdate(EuroScopePlugIn::CRadarTarget RadarTarget);
 
-    void OnFlightPlanDisconnect(EuroScopePlugIn::CFlightPlan FlightPlan) override;
-    void OnFlightPlanFlightPlanDataUpdate(EuroScopePlugIn::CFlightPlan FlightPlan) override;
-    void OnFlightPlanControllerAssignedDataUpdate(EuroScopePlugIn::CFlightPlan FlightPlan, int DataType) override;
+    void OnFlightPlanDisconnect(EuroScopePlugIn::CFlightPlan FlightPlan);
+    void OnFlightPlanFlightPlanDataUpdate(EuroScopePlugIn::CFlightPlan FlightPlan);
+    void OnFlightPlanControllerAssignedDataUpdate(EuroScopePlugIn::CFlightPlan FlightPlan, int DataType);
     void OnFlightPlanFlightStripPushed(EuroScopePlugIn::CFlightPlan FlightPlan,
                                        const char* sSenderController,
-                                       const char* sTargetController) override;
+                                       const char* sTargetController);
 
     void OnPlaneInformationUpdate(const char* sCallsign,
                                   const char* sLivery,
-                                  const char* sPlaneType) override;
+                                  const char* sPlaneType);
 
     void OnCompilePrivateChat(const char* sSenderCallsign,
                               const char* sReceiverCallsign,
-                              const char* sChatMessage) override;
+                              const char* sChatMessage);
 
     void OnCompileFrequencyChat(const char* sSenderCallsign,
                                 double Frequency,
-                                const char* sChatMessage) override;
+                                const char* sChatMessage);
 
-    void OnNewMetarReceived(const char* sStation, const char* sFullMetar) override;
-    bool OnCompileCommand(const char* sCommandLine) override;
-    void OnAirportRunwayActivityChanged(void) override;
+    void OnNewMetarReceived(const char* sStation, const char* sFullMetar);
+    bool OnCompileCommand(const char* sCommandLine);
+    void OnAirportRunwayActivityChanged(void) ;
 
-    void OnTimer(int Counter) override;
+    void OnTimer(int Counter) ;
 
     // Accessors
     edb::ThreadSafeQueue& GetIncomingQueue() { return m_incomingQueue; }
-    edb::ThreadSafeQueue& GetOutgoingQueue() { return m_outgoingQueue; }
 
 private:
     // Helper: push a JSON string to the outgoing queue, wrapped with a type
     void PushEvent(const char* type, const std::string& dataJson);
     void PushEvent(const char* type);
 
-    // Send a full snapshot of all flight plans, radar targets, and controllers
-    void SendFullSnapshot();
 
     edb::ThreadSafeQueue m_incomingQueue;
-    edb::ThreadSafeQueue m_outgoingQueue;
     std::unique_ptr<edb::WebSocketServer> m_wsServer;
 };

@@ -29,6 +29,22 @@ public:
         m_cv.notify_one();
     }
 
+    // --- PushWithLimit ---
+    // Thread-safe push with max queue size. If the queue is at capacity,
+    // the oldest item is dropped to make room. Returns true if no item was dropped.
+    // maxSize=0 means unlimited (always succeeds without dropping).
+    bool PushWithLimit(std::string msg, size_t maxSize) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        bool dropped = false;
+        if (maxSize > 0 && m_queue.size() >= maxSize) {
+            m_queue.pop();  // drop oldest
+            dropped = true;
+        }
+        m_queue.push(std::move(msg));
+        m_cv.notify_one();
+        return !dropped;
+    }
+
     // --- TryPop ---
     // Non-blocking. Returns true if an item was popped.
     bool TryPop(std::string& out) {
@@ -62,6 +78,12 @@ public:
             ++count;
         }
         return count;
+    }
+
+    // --- Size ---
+    size_t Size() const {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_queue.size();
     }
 
     // --- Empty ---

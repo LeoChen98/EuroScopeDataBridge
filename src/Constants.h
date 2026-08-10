@@ -4,21 +4,31 @@
 // EuroScope Data Bridge — Constants
 // ============================================================================
 
+// --- Plugin Identity ---
+#define   PLUGIN_NAME         "EuroScope Data Bridge"
+#define   PLUGIN_VERSION      "1.0.0"
+#define   PLUGIN_AUTHOR       "Leo Chen"
+#define   PLUGIN_COPYRIGHT    "MIT License"
+
+// Numeric version parts (used by the Win32 version resource, Resource.rc).
+#define   PLUGIN_VERSION_MAJOR   1
+#define   PLUGIN_VERSION_MINOR   0
+#define   PLUGIN_VERSION_PATCH   0
+
 namespace edb {
 
-// --- Plugin Identity ---
-constexpr int    COMPATIBILITY_CODE = 16;
-constexpr auto   PLUGIN_NAME        = "EuroScope Data Bridge";
-constexpr auto   PLUGIN_VERSION     = "1.0.0";
-constexpr auto   PLUGIN_AUTHOR      = "DataBridge";
-constexpr auto   PLUGIN_COPYRIGHT   = "MIT License";
-
 // --- WebSocket Configuration ---
-constexpr int    WS_PORT            = 48521;
-constexpr int    WS_OUTGOING_INTERVAL_MS = 10;   // outgoing queue flush interval
+constexpr int    WS_PORT                 = 48521;
 
-// --- Timer Configuration ---
-constexpr int    FULL_SNAPSHOT_INTERVAL = 10;    // send full snapshot every N seconds
+
+// Max bytes buffered per client before oldest frames are dropped.
+constexpr size_t MAX_CLIENT_SEND_QUEUE_BYTES = 32 * 1024 * 1024;  // 32 MB
+
+// Max frames queued per client (hard cap regardless of byte count).
+constexpr size_t MAX_CLIENT_SEND_QUEUE_FRAMES = 8192;
+
+// --- Connection Limits ---
+constexpr int    MAX_CLIENTS             = 64;    // hard cap on concurrent WebSocket clients
 
 // ============================================================================
 // Message Type String Constants (Push)
@@ -41,7 +51,6 @@ namespace msg_type {
     constexpr auto METAR_RECEIVED                = "metar_received";
     constexpr auto PLANE_INFO                    = "plane_info";
     constexpr auto TIMER                         = "timer";
-    constexpr auto FULL_SNAPSHOT                 = "full_snapshot";
 
     // Request (client → server) — Queries
     constexpr auto GET_FLIGHTPLANS               = "get_flightplans";
@@ -51,6 +60,7 @@ namespace msg_type {
     constexpr auto GET_VOICE_CHANNELS            = "get_voice_channels";
     constexpr auto GET_TRANSITION_ALTITUDE       = "get_transition_altitude";
     constexpr auto GET_CONNECTION_TYPE           = "get_connection_type";
+    constexpr auto GET_FULL_SNAPSHOT              = "get_full_snapshot";
 
     // Request (client → server) — Setters
     constexpr auto SET_SQUAWK                    = "set_squawk";
@@ -108,6 +118,9 @@ namespace msg_type {
     // Response
     constexpr auto RESPONSE                      = "response";
     constexpr auto ERROR                         = "error";
+
+    // Internal routing tag
+    constexpr auto BROADCAST                     = "_broadcast";
 }
 
 // ============================================================================
@@ -122,6 +135,10 @@ namespace json_key {
     constexpr auto SUCCESS  = "success";
     constexpr auto ERROR    = "error";
     constexpr auto COUNTER  = "counter";
+
+    // Routing (internal, not exposed to clients)
+    constexpr auto CLIENT_ID = "client_id";
+    constexpr auto ROUTE     = "_route";
 }
 
 } // namespace edb

@@ -34,16 +34,23 @@
     <ClInclude Include="src\Handlers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="EuroScopePlugIn\EuroScopePlugIn.h">
+    <ClInclude Include="third_party\EuroScopePlugIn\EuroScopePlugIn.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <None Include="EuroscopeDataBridge.def">
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\Resource.rc">
       <Filter>Resource Files</Filter>
-    </None>
+    </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source Files" />
     <Filter Include="Header Files" />
     <Filter Include="Resource Files" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\dllmain.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

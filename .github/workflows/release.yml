@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'release/*'
+
+jobs:
+  release:
+    name: Build and Publish Draft Release
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build EuroScopeDataBridge (Release, Win32)
+        run: msbuild EuroScopeDataBridge.vcxproj -p:Configuration=Release -p:Platform=Win32 -p:SolutionDir="${{ github.workspace }}\" -m
+
+      - name: Publish Draft Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: true
+          generate_release_notes: true
+          # 只附加主工程输出（dll/lib/exp/pdb），排除 obj 中间目录；不包含测试工程产物
+          artifacts: 'Release/*,!Release/obj'

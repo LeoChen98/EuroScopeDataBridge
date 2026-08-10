@@ -1,0 +1,19 @@
+name: Build Main Project
+
+on:
+  push:
+
+jobs:
+  build:
+    name: Build EuroScopeDataBridge (C++ DLL)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build Release (Win32)
+        # vcpkg_installed 头文件已随仓库提交，直接 MSBuild 即可
+        run: msbuild EuroScopeDataBridge.vcxproj -p:Configuration=Release -p:Platform=Win32 -p:SolutionDir="${{ github.workspace }}\" -m

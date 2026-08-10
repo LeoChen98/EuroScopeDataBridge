@@ -18,3 +18,10 @@ jobs:
 
       - name: Build
         run: dotnet build tests/EuroScopeDataBridge.TestProject/EuroScopeDataBridge.TestProject.csproj -c Release --nologo
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EuroScopeDataBridge.TestProject-Release
+          # 测试工程完整构建输出
+          path: tests/EuroScopeDataBridge.TestProject/bin/Release

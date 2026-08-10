@@ -24,3 +24,12 @@ jobs:
 
       - name: Build Release (Win32)
         run: msbuild EuroScopeDataBridge.vcxproj -p:Configuration=Release -p:Platform=Win32 -p:SolutionDir="${{ github.workspace }}\" -m
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EuroScopeDataBridge-Release
+          # 主工程输出文件（排除 obj 中间目录）
+          path: |
+            Release/*
+            !Release/obj

@@ -18,6 +18,14 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Install vcpkg dependencies
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
+          & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
+          # 按 vcpkg.json 安装 asio/nlohmann-json 到仓库根目录 vcpkg_installed（vcxproj 的 include 路径依赖它）
+          & "$env:RUNNER_TEMP\vcpkg\vcpkg.exe" install --triplet x86-windows
+
       - name: Build EuroScopeDataBridge (Release, Win32)
         run: msbuild EuroScopeDataBridge.vcxproj -p:Configuration=Release -p:Platform=Win32 -p:SolutionDir="${{ github.workspace }}\" -m
 

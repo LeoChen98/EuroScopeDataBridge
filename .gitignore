@@ -409,9 +409,6 @@ FodyWeavers.xsd
 vcpkg/
 vcpkg_installed/
 
-# External dependencies (third-party SDK/headers)
-third_party/
-
 # EuroScope running files
 SectorFileProviderDescriptor.txt
 ipaddr.txt

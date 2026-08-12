@@ -22,6 +22,9 @@
   - [plane_info](#plane_info)
   - [timer](#timer)
   - [airport_runway_activity_changed](#airport_runway_activity_changed)
+- [Subscription](#subscription)
+  - [subscribe](#subscribe)
+  - [unsubscribe](#unsubscribe)
 - [Requests (client → server)](#requests-client--server)
   - [Query](#query)
     - [get_flightplans](#get_flightplans)
@@ -103,13 +106,13 @@ EuroScope Data Bridge is an EuroScope plugin DLL that starts a WebSocket server 
 
 Communication modes:
 
-- **Push**: EuroScope callback events are automatically serialized to JSON and broadcast to all connected clients, no request required.
+- **Push (subscription-based)**: EuroScope callback events are automatically serialized to JSON. A client must first send a `subscribe` request listing the event types it wants; after that, only subscribed clients receive the matching events. If no client has subscribed to an event type, the corresponding EuroScope callback is skipped entirely (no serialization, no push). See [Subscription](#subscription).
 - **Request/Response**: the client sends a request with a unique `id`; the server returns a response carrying the same `id` after processing. Requests are processed on the EuroScope main thread (OnTimer) to guarantee thread safety.
 
 Timing behavior:
 
-- A broadcast thread flushes queued messages to all clients every **10 ms**.
-- A `timer` event is sent every **1 second**.
+- A broadcast thread flushes queued messages to clients every **10 ms**.
+- A `timer` event is sent every **1 second** — but only to clients that subscribed to `timer`.
 
 ---
 
@@ -151,7 +154,7 @@ All client → server requests use the following JSON structure:
 
 ### Push event format
 
-Server-pushed events do not contain an `id` field:
+Push events are only sent to clients that subscribed to their `type` (see [Subscription](#subscription)). Server-pushed events do not contain an `id` field:
 
 ```json
 {
@@ -490,6 +493,80 @@ Runway activity status change.
 {
   "type": "airport_runway_activity_changed",
   "data": {}
+}
+```
+
+---
+
+## Subscription
+
+Push events are **not** delivered by default. A client must subscribe to the event types it wants; only subscribed clients receive the matching events. When no client has subscribed to an event type, the corresponding EuroScope callback is skipped entirely (no serialization, no push).
+
+- Subscriptions are **per client** (each WebSocket connection has its own set).
+- Subscriptions are cleared automatically when a client disconnects.
+- Unknown event type strings are accepted but never produce events; the full list of push event types is in [Push events (server → client)](#push-events-server--client).
+
+### subscribe
+
+Adds the given event types to the client's subscription set. Repeatable — calling it again with more types appends them.
+
+**Request example:**
+
+```json
+{ "type": "subscribe", "id": "sub-1", "data": { "events": ["radar_update", "flightplan_update", "timer"] } }
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `data.events` | string[] | ✅ | Event types to subscribe to |
+
+**Response example:**
+
+```json
+{
+  "type": "response",
+  "id": "sub-1",
+  "data": {
+    "success": true,
+    "events": ["flightplan_update", "radar_update", "timer"]
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `data.success` | bool | `true` |
+| `data.events` | string[] | The client's full current subscription set after this operation |
+
+### unsubscribe
+
+Removes the given event types from the client's subscription set. If `data.events` is omitted or an empty array, **all** subscriptions are cleared.
+
+**Request example:**
+
+```json
+{ "type": "unsubscribe", "id": "sub-2", "data": { "events": ["timer"] } }
+
+// Clear all subscriptions
+{ "type": "unsubscribe", "id": "sub-3" }
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `data.events` | string[] | No | Event types to unsubscribe; omit or pass `[]` to clear all |
+
+The response has the same shape as `subscribe` (`success` + current `events`).
+
+**Error example** (`data.events` is not an array):
+
+```json
+{
+  "type": "response",
+  "id": "sub-1",
+  "data": {
+    "success": false,
+    "error": "Invalid 'events' field; expected an array of strings"
+  }
 }
 ```
 

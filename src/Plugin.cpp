@@ -32,15 +32,30 @@ DataBridgePlugin::DataBridgePlugin()
     });
 
     // Register request processor: called from ES main thread via PostMessage or OnTimer fallback.
-    // Extracts client_id (injected by OnMessage), calls HandleRequest, routes response.
+    // Extracts client_id (injected by OnMessage), routes subscribe/unsubscribe to the
+    // subscription manager, otherwise calls HandleRequest and routes the response.
     m_wsServer->SetRequestProcessor([this](std::string&& requestStr) {
         std::string clientId;
+        std::string type;
         try {
             json req = json::parse(requestStr);
-            auto it = req.find(json_key::CLIENT_ID);
+            auto it = req.find(json_key::TYPE);
             if (it != req.end() && it->is_string())
-                clientId = it->get<std::string>();
+                type = it->get<std::string>();
+            auto idIt = req.find(json_key::CLIENT_ID);
+            if (idIt != req.end() && idIt->is_string())
+                clientId = idIt->get<std::string>();
         } catch (const json::parse_error&) { return; }
+
+        // Subscription control requests are handled by the WebSocketServer,
+        // which owns the per-client subscription state.
+        if (type == msg_type::SUBSCRIBE || type == msg_type::UNSUBSCRIBE)
+        {
+            std::string response = m_wsServer->HandleSubscriptionRequest(requestStr);
+            if (!response.empty())
+                m_wsServer->RouteOutgoing(std::move(response), clientId);
+            return;
+        }
 
         std::string response = HandleRequest(*this, requestStr);
         if (!response.empty())
@@ -73,7 +88,7 @@ void DataBridgePlugin::PushEvent(const char* type, const std::string& dataJson)
         json msg;
         msg[json_key::TYPE] = type;
         msg[json_key::DATA] = json::parse(dataJson.empty() ? "{}" : dataJson);
-        m_wsServer->Broadcast(msg.dump());
+        m_wsServer->Broadcast(type, msg.dump());
     } catch (...) {
         std::string err = "[DataBridge] Exception in PushEvent(type=";
         err += type; err += ")";
@@ -88,7 +103,7 @@ void DataBridgePlugin::PushEvent(const char* type)
         json msg;
         msg[json_key::TYPE] = type;
         msg[json_key::DATA] = json::object();
-        m_wsServer->Broadcast(msg.dump());
+        m_wsServer->Broadcast(type, msg.dump());
     } catch (...) {
         std::string err = "[DataBridge] Exception in PushEvent(type=";
         err += type; err += ")";
@@ -103,6 +118,8 @@ void DataBridgePlugin::PushEvent(const char* type)
 
 void DataBridgePlugin::OnRadarTargetPositionUpdate(CRadarTarget RadarTarget)
 {
+    if (!m_wsServer->HasSubscribers(msg_type::RADAR_UPDATE))
+        return;
     if (!RadarTarget.IsValid())
         return;
     std::string data = SerializeRadarTargetToJson(RadarTarget);
@@ -111,6 +128,8 @@ void DataBridgePlugin::OnRadarTargetPositionUpdate(CRadarTarget RadarTarget)
 
 void DataBridgePlugin::OnFlightPlanFlightPlanDataUpdate(CFlightPlan FlightPlan)
 {
+    if (!m_wsServer->HasSubscribers(msg_type::FLIGHTPLAN_UPDATE))
+        return;
     if (!FlightPlan.IsValid())
         return;
     std::string data = SerializeFlightPlanToJson(FlightPlan);
@@ -119,6 +138,8 @@ void DataBridgePlugin::OnFlightPlanFlightPlanDataUpdate(CFlightPlan FlightPlan)
 
 void DataBridgePlugin::OnFlightPlanDisconnect(CFlightPlan FlightPlan)
 {
+    if (!m_wsServer->HasSubscribers(msg_type::FLIGHTPLAN_DISCONNECT))
+        return;
     json data;
     data[json_key::CALLSIGN] = FlightPlan.GetCallsign();
     PushEvent(msg_type::FLIGHTPLAN_DISCONNECT, data.dump());
@@ -126,6 +147,8 @@ void DataBridgePlugin::OnFlightPlanDisconnect(CFlightPlan FlightPlan)
 
 void DataBridgePlugin::OnFlightPlanControllerAssignedDataUpdate(CFlightPlan FlightPlan, int DataType)
 {
+    if (!m_wsServer->HasSubscribers(msg_type::CONTROLLER_ASSIGNED_DATA))
+        return;
     if (!FlightPlan.IsValid())
         return;
     std::string fpJson = SerializeFlightPlanToJson(FlightPlan);
@@ -133,13 +156,15 @@ void DataBridgePlugin::OnFlightPlanControllerAssignedDataUpdate(CFlightPlan Flig
     msg[json_key::TYPE] = msg_type::CONTROLLER_ASSIGNED_DATA;
     msg[json_key::DATA] = json::parse(fpJson);
     msg[json_key::DATA]["data_type"] = DataType;
-    m_wsServer->Broadcast(msg.dump());
+    m_wsServer->Broadcast(msg_type::CONTROLLER_ASSIGNED_DATA, msg.dump());
 }
 
 void DataBridgePlugin::OnFlightPlanFlightStripPushed(CFlightPlan FlightPlan,
                                                       const char* sSenderController,
                                                       const char* sTargetController)
 {
+    if (!m_wsServer->HasSubscribers(msg_type::FLIGHT_STRIP_PUSHED))
+        return;
     json data;
     data[json_key::CALLSIGN] = FlightPlan.IsValid() ? FlightPlan.GetCallsign() : "";
     data["sender"] = sSenderController ? sSenderController : "";
@@ -153,6 +178,8 @@ void DataBridgePlugin::OnFlightPlanFlightStripPushed(CFlightPlan FlightPlan,
 
 void DataBridgePlugin::OnControllerPositionUpdate(CController Controller)
 {
+    if (!m_wsServer->HasSubscribers(msg_type::CONTROLLER_UPDATE))
+        return;
     if (!Controller.IsValid())
         return;
     std::string data = SerializeControllerToJson(Controller);
@@ -161,6 +188,8 @@ void DataBridgePlugin::OnControllerPositionUpdate(CController Controller)
 
 void DataBridgePlugin::OnControllerDisconnect(CController Controller)
 {
+    if (!m_wsServer->HasSubscribers(msg_type::CONTROLLER_DISCONNECT))
+        return;
     json data;
     if (Controller.IsValid())
     {
@@ -178,6 +207,8 @@ void DataBridgePlugin::OnPlaneInformationUpdate(const char* sCallsign,
                                                  const char* sLivery,
                                                  const char* sPlaneType)
 {
+    if (!m_wsServer->HasSubscribers(msg_type::PLANE_INFO))
+        return;
     json data;
     data[json_key::CALLSIGN] = sCallsign ? sCallsign : "";
     data["livery"] = sLivery ? sLivery : "";
@@ -189,6 +220,8 @@ void DataBridgePlugin::OnCompilePrivateChat(const char* sSenderCallsign,
                                              const char* sReceiverCallsign,
                                              const char* sChatMessage)
 {
+    if (!m_wsServer->HasSubscribers(msg_type::CHAT_PRIVATE))
+        return;
     json data;
     data["sender"] = sSenderCallsign ? sSenderCallsign : "";
     data["receiver"] = sReceiverCallsign ? sReceiverCallsign : "";
@@ -200,6 +233,8 @@ void DataBridgePlugin::OnCompileFrequencyChat(const char* sSenderCallsign,
                                                double Frequency,
                                                const char* sChatMessage)
 {
+    if (!m_wsServer->HasSubscribers(msg_type::CHAT_FREQUENCY))
+        return;
     json data;
     data["sender"] = sSenderCallsign ? sSenderCallsign : "";
     data["frequency"] = Frequency;
@@ -209,6 +244,8 @@ void DataBridgePlugin::OnCompileFrequencyChat(const char* sSenderCallsign,
 
 void DataBridgePlugin::OnNewMetarReceived(const char* sStation, const char* sFullMetar)
 {
+    if (!m_wsServer->HasSubscribers(msg_type::METAR_RECEIVED))
+        return;
     json data;
     data["station"] = sStation ? sStation : "";
     data["metar"] = sFullMetar ? sFullMetar : "";
@@ -223,7 +260,9 @@ bool DataBridgePlugin::OnCompileCommand(const char* sCommandLine)
 
 void DataBridgePlugin::OnAirportRunwayActivityChanged(void)
 {
-    PushEvent("airport_runway_activity_changed");
+    if (!m_wsServer->HasSubscribers(msg_type::AIRPORT_RUNWAY_ACTIVITY_CHANGED))
+        return;
+    PushEvent(msg_type::AIRPORT_RUNWAY_ACTIVITY_CHANGED);
 }
 
 // ============================================================================
@@ -236,11 +275,14 @@ void DataBridgePlugin::OnTimer(int Counter)
     // 1. Process incoming WebSocket requests on the EuroScope main thread
     m_wsServer->DrainIncomingQueue();
 
-    // 2. Send timer event every second
-    json timerMsg;
-    timerMsg[json_key::TYPE] = msg_type::TIMER;
-    timerMsg[json_key::DATA][json_key::COUNTER] = Counter;
-    m_wsServer->Broadcast(timerMsg.dump());
+    // 2. Send timer event every second (only to subscribers)
+    if (m_wsServer->HasSubscribers(msg_type::TIMER))
+    {
+        json timerMsg;
+        timerMsg[json_key::TYPE] = msg_type::TIMER;
+        timerMsg[json_key::DATA][json_key::COUNTER] = Counter;
+        m_wsServer->Broadcast(msg_type::TIMER, timerMsg.dump());
+    }
     } catch (...) {
         std::string err = "[DataBridge] Exception in OnTimer";
         std::cerr << err << std::endl;

@@ -15,9 +15,9 @@ An EuroScope simulation ATC plugin DLL that exposes live flight data through a l
 └──────────────────────┘
 ```
 
-- **Push mode**: EuroScope callback events (radar, flight plans, controllers, chat, METAR, etc.) are automatically serialized to JSON and broadcast to all connected WebSocket clients.
+- **Push mode (subscription-based)**: EuroScope callback events (radar, flight plans, controllers, chat, METAR, etc.) are automatically serialized to JSON. A client must first `subscribe` to the event types it is interested in; only subscribed clients receive the matching events. When no client has subscribed to an event type, its callback is skipped entirely (no serialization, no push).
 - **Pull/Request mode**: clients send JSON requests (e.g. `get_flightplans`, `get_full_snapshot`), which are processed on the EuroScope main thread, with the results returned over WebSocket.
-- **Timed events**: a `timer` event (with a tick counter) is broadcast once per second, handy for client-side polling or heartbeat detection.
+- **Timed events**: a `timer` event (with a tick counter) fires once per second, likewise only pushed to clients that subscribed to it — handy for client-side polling or heartbeat detection.
 
 ## Tech stack
 
@@ -57,7 +57,7 @@ Copy `EuroscopeDataBridge.dll` to the EuroScope plugin directory, or add the DLL
 
 ## Quick start
 
-Connect to the WebSocket and receive real-time pushes:
+Connect to the WebSocket and subscribe to the event types you want before receiving real-time pushes:
 
 ```javascript
 // Browser or Node.js
@@ -66,6 +66,15 @@ const ws = new WebSocket('ws://127.0.0.1:48521');
 ws.onmessage = (event) => {
   const msg = JSON.parse(event.data);
   console.log(msg.type, msg.data);
+};
+
+ws.onopen = () => {
+  // Subscribe to events: pushes are only delivered for subscribed types
+  ws.send(JSON.stringify({
+    type: 'subscribe',
+    id: 'sub-1',
+    data: { events: ['radar_update', 'flightplan_update', 'timer'] }
+  }));
 };
 
 // Query all flight plans
@@ -81,6 +90,8 @@ ws.send(JSON.stringify({
   data: { callsign: 'CES1234', value: '1234' }
 }));
 ```
+
+> **Note**: all Push events are delivered only after subscription. `subscribe` may be called repeatedly to add more event types; `unsubscribe` removes subscriptions (omit `data.events` or pass an empty array to clear all).
 
 For the full API documentation, see [docs/wiki.md](docs/wiki.md) (English) or [docs/wiki_CN.md](docs/wiki_CN.md) (中文).
 

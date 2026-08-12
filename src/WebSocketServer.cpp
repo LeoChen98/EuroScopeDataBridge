@@ -145,6 +145,7 @@ void WebSocketServer::Stop() {
         std::lock_guard<std::mutex> lock(m_clientsMutex);
         m_sessions.clear();
         m_clientIdToHdl.clear();
+        m_subscriptionCounts.clear();
     }
 }
 
@@ -189,6 +190,12 @@ void WebSocketServer::OnClose(ConnectionHdl hdl) {
     std::lock_guard<std::mutex> lock(m_clientsMutex);
     auto it = m_sessions.find(hdl);
     if (it != m_sessions.end()) {
+        // Remove this client's subscriptions from the global counts
+        for (const auto& e : it->second->subscriptions) {
+            auto cnt = m_subscriptionCounts.find(e);
+            if (cnt != m_subscriptionCounts.end() && --cnt->second == 0)
+                m_subscriptionCounts.erase(cnt);
+        }
         {
             std::ostringstream oss;
             oss << "[DataBridge] Client disconnected: " << it->second->clientId;
@@ -206,6 +213,11 @@ void WebSocketServer::OnFail(ConnectionHdl hdl) {
     std::lock_guard<std::mutex> lock(m_clientsMutex);
     auto it = m_sessions.find(hdl);
     if (it != m_sessions.end()) {
+        for (const auto& e : it->second->subscriptions) {
+            auto cnt = m_subscriptionCounts.find(e);
+            if (cnt != m_subscriptionCounts.end() && --cnt->second == 0)
+                m_subscriptionCounts.erase(cnt);
+        }
         m_clientIdToHdl.erase(it->second->clientId);
         m_sessions.erase(it);
     }
@@ -245,12 +257,12 @@ void WebSocketServer::OnMessage(ConnectionHdl hdl, WsServer::message_ptr msg) {
 }
 
 // ============================================================================
-// Broadcast — deliver to every handshake-complete client
+// Broadcast — deliver a push event only to clients subscribed to its type
 // ============================================================================
-void WebSocketServer::Broadcast(const std::string& msg) {
+void WebSocketServer::Broadcast(const std::string& type, const std::string& msg) {
     std::lock_guard<std::mutex> lock(m_clientsMutex);
     for (auto& pair : m_sessions) {
-        if (pair.second->handshakeDone) {
+        if (pair.second->handshakeDone && pair.second->subscriptions.count(type) > 0) {
             websocketpp::lib::error_code ec;
             m_server.send(pair.first, msg, websocketpp::frame::opcode::text, ec);
         }
@@ -258,11 +270,130 @@ void WebSocketServer::Broadcast(const std::string& msg) {
 }
 
 // ============================================================================
+// HasSubscribers — whether any client subscribed to the event type
+// ============================================================================
+bool WebSocketServer::HasSubscribers(const std::string& type) {
+    std::lock_guard<std::mutex> lock(m_clientsMutex);
+    auto it = m_subscriptionCounts.find(type);
+    return it != m_subscriptionCounts.end() && it->second > 0;
+}
+
+// ============================================================================
+// HandleSubscriptionRequest — process subscribe / unsubscribe (ES main thread)
+// ============================================================================
+std::string WebSocketServer::HandleSubscriptionRequest(const std::string& requestJson)
+{
+    json req;
+    try {
+        req = json::parse(requestJson);
+    } catch (const json::parse_error&) {
+        return "";
+    }
+
+    std::string id;
+    auto idIt = req.find(json_key::ID);
+    if (idIt != req.end() && idIt->is_string())
+        id = idIt->get<std::string>();
+
+    std::string type;
+    auto typeIt = req.find(json_key::TYPE);
+    if (typeIt != req.end() && typeIt->is_string())
+        type = typeIt->get<std::string>();
+
+    std::string clientId;
+    auto clientIt = req.find(json_key::CLIENT_ID);
+    if (clientIt != req.end() && clientIt->is_string())
+        clientId = clientIt->get<std::string>();
+
+    auto makeResponse = [&id](bool success, const std::string& error, const std::set<std::string>& subs) {
+        json resp;
+        resp[json_key::TYPE] = msg_type::RESPONSE;
+        resp[json_key::ID] = id;
+        resp[json_key::DATA][json_key::SUCCESS] = success;
+        if (!error.empty())
+            resp[json_key::DATA][json_key::ERROR] = error;
+        if (success) {
+            resp[json_key::DATA][json_key::EVENTS] = json::array();
+            for (const auto& e : subs)
+                resp[json_key::DATA][json_key::EVENTS].push_back(e);
+        }
+        return resp.dump();
+    };
+
+    // Collect requested event types
+    std::set<std::string> events;
+    if (req.contains(json_key::DATA) && req[json_key::DATA].is_object())
+    {
+        auto evIt = req[json_key::DATA].find(json_key::EVENTS);
+        if (evIt != req[json_key::DATA].end())
+        {
+            if (!evIt->is_array())
+                return makeResponse(false, "Invalid 'events' field; expected an array of strings", events);
+            for (const auto& e : *evIt)
+                if (e.is_string())
+                    events.insert(e.get<std::string>());
+        }
+    }
+
+    const bool subscribe = (type == msg_type::SUBSCRIBE);
+
+    std::lock_guard<std::mutex> lock(m_clientsMutex);
+
+    auto it = m_clientIdToHdl.find(clientId);
+    if (it == m_clientIdToHdl.end())
+        return makeResponse(false, "Unknown client", events);
+
+    auto sessionIt = m_sessions.find(it->second);
+    if (sessionIt == m_sessions.end())
+        return makeResponse(false, "Unknown client", events);
+
+    auto& subs = sessionIt->second->subscriptions;
+
+    if (subscribe)
+    {
+        for (const auto& e : events)
+        {
+            if (subs.insert(e).second)
+                ++m_subscriptionCounts[e];
+        }
+    }
+    else
+    {
+        // unsubscribe: no events given (or empty array) clears all subscriptions
+        if (events.empty())
+        {
+            for (const auto& e : subs)
+            {
+                auto cnt = m_subscriptionCounts.find(e);
+                if (cnt != m_subscriptionCounts.end() && --cnt->second == 0)
+                    m_subscriptionCounts.erase(cnt);
+            }
+            subs.clear();
+        }
+        else
+        {
+            for (const auto& e : events)
+            {
+                if (subs.erase(e) > 0)
+                {
+                    auto cnt = m_subscriptionCounts.find(e);
+                    if (cnt != m_subscriptionCounts.end() && --cnt->second == 0)
+                        m_subscriptionCounts.erase(cnt);
+                }
+            }
+        }
+    }
+
+    return makeResponse(true, "", subs);
+}
+
+// ============================================================================
 // RouteOutgoing — deliver to a specific client, or broadcast when empty
 // ============================================================================
 void WebSocketServer::RouteOutgoing(const std::string& msg, const std::string& clientId) {
     if (clientId.empty()) {
-        Broadcast(msg);
+        std::lock_guard<std::mutex> lock(m_clientsMutex);
+        SendToAllLocked(msg);
         return;
     }
 
@@ -271,6 +402,18 @@ void WebSocketServer::RouteOutgoing(const std::string& msg, const std::string& c
     if (it != m_clientIdToHdl.end()) {
         websocketpp::lib::error_code ec;
         m_server.send(it->second, msg, websocketpp::frame::opcode::text, ec);
+    }
+}
+
+// ============================================================================
+// SendToAllLocked — send to every handshake-complete client (no filter)
+// ============================================================================
+void WebSocketServer::SendToAllLocked(const std::string& msg) {
+    for (auto& pair : m_sessions) {
+        if (pair.second->handshakeDone) {
+            websocketpp::lib::error_code ec;
+            m_server.send(pair.first, msg, websocketpp::frame::opcode::text, ec);
+        }
     }
 }
 

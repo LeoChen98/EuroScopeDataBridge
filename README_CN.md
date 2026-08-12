@@ -15,9 +15,9 @@ EuroScope 模拟飞行管制插件 DLL，通过本地 WebSocket API 对外暴露
 └──────────────────────┘
 ```
 
-- **Push（推模式）**：EuroScope 回调事件（雷达、飞行计划、管制员、聊天、METAR 等）自动序列化为 JSON 并广播给所有已连接的 WebSocket 客户端。
+- **Push（订阅推送）**：EuroScope 回调事件（雷达、飞行计划、管制员、聊天、METAR 等）自动序列化为 JSON。客户端需先用 `subscribe` 请求订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件对应的回调会被跳过（不做序列化与推送）。
 - **Pull/Request（拉/请求模式）**：客户端发送 JSON 请求（如 `get_flightplans`、`get_full_snapshot`），在 EuroScope 主线程上处理，结果通过 WebSocket 返回。
-- **定时事件**：每秒广播一次 `timer` 事件（含 tick 计数器），方便客户端做定时轮询或心跳检测。
+- **定时事件**：`timer` 事件（含 tick 计数器）每秒触发一次，同样只在客户端订阅后推送，方便客户端做定时轮询或心跳检测。
 
 ## 技术栈
 
@@ -57,7 +57,7 @@ vcpkg install nlohmann-json:x86-windows asio:x86-windows
 
 ## 快速开始
 
-连接 WebSocket 后即可接收实时推送：
+连接 WebSocket 后，先订阅需要的事件类型，才能收到对应的实时推送：
 
 ```javascript
 // 浏览器或 Node.js
@@ -66,6 +66,15 @@ const ws = new WebSocket('ws://127.0.0.1:48521');
 ws.onmessage = (event) => {
   const msg = JSON.parse(event.data);
   console.log(msg.type, msg.data);
+};
+
+ws.onopen = () => {
+  // 订阅事件：订阅后才会收到对应类型的推送
+  ws.send(JSON.stringify({
+    type: 'subscribe',
+    id: 'sub-1',
+    data: { events: ['radar_update', 'flightplan_update', 'timer'] }
+  }));
 };
 
 // 查询所有飞行计划
@@ -81,6 +90,8 @@ ws.send(JSON.stringify({
   data: { callsign: 'CES1234', value: '1234' }
 }));
 ```
+
+> **注意**：所有 Push 事件均需订阅后才推送。`subscribe` 可重复调用以追加订阅；`unsubscribe` 用于取消订阅（`data.events` 缺省或为空数组时表示取消全部订阅）。
 
 详细的 API 文档请参阅 [docs/wiki_CN.md](docs/wiki_CN.md)（中文）或 [docs/wiki.md](docs/wiki.md)（English）。
 

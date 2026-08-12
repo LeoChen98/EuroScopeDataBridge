@@ -6,13 +6,13 @@
 
 // --- Plugin Identity ---
 #define   PLUGIN_NAME         "EuroScope Data Bridge"
-#define   PLUGIN_VERSION      "1.0.0"
+#define   PLUGIN_VERSION      "1.1.0"
 #define   PLUGIN_AUTHOR       "Leo Chen"
 #define   PLUGIN_COPYRIGHT    "MIT License"
 
 // Numeric version parts (used by the Win32 version resource, Resource.rc).
 #define   PLUGIN_VERSION_MAJOR   1
-#define   PLUGIN_VERSION_MINOR   0
+#define   PLUGIN_VERSION_MINOR   1
 #define   PLUGIN_VERSION_PATCH   0
 
 namespace edb {

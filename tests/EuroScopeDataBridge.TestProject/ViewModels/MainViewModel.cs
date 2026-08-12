@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json;
@@ -264,10 +265,26 @@ public partial class MainViewModel : ObservableObject
 
     private void OnConnectionChanged(bool connected)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        Application.Current.Dispatcher.Invoke(async () =>
         {
             IsConnected = connected;
             StatusText = connected ? "Connected" : "Disconnected";
+            if (connected)
+            {
+                // Push events are subscription-based: subscribe to the event
+                // types this test client consumes.
+                await _wsService.SendRequestAsync("subscribe", new Dictionary<string, object>
+                {
+                    ["events"] = new[]
+                    {
+                        "radar_update",
+                        "flightplan_update",
+                        "flightplan_disconnect",
+                        "controller_update",
+                        "controller_disconnect"
+                    }
+                });
+            }
         });
     }
 

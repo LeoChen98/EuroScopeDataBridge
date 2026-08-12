@@ -22,6 +22,9 @@
   - [plane_info](#plane_info)
   - [timer](#timer)
   - [airport_runway_activity_changed](#airport_runway_activity_changed)
+- [订阅](#订阅)
+  - [subscribe](#subscribe)
+  - [unsubscribe](#unsubscribe)
 - [请求（客户端 → 服务端）](#请求客户端--服务端)
   - [查询类](#查询类)
     - [get_flightplans](#get_flightplans)
@@ -103,13 +106,13 @@ EuroScope Data Bridge 是一个 EuroScope 插件 DLL，在本地 `ws://127.0.0.1
 
 通信模式：
 
-- **Push（推）**：EuroScope 回调事件自动序列化为 JSON 并广播给所有已连接客户端，无需请求。
+- **Push（订阅推送）**：EuroScope 回调事件自动序列化为 JSON。客户端需先用 `subscribe` 请求订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件对应的回调会被跳过（不做序列化与推送）。详见 [订阅](#订阅)。
 - **Request/Response（请求/响应）**：客户端发送带唯一 `id` 的请求，服务端在处理后返回带有相同 `id` 的响应。请求在 EuroScope 主线程（OnTimer）中处理，保证线程安全。
 
 定时行为：
 
-- 每 **10 ms** 广播线程将出队队列中的消息批量发送给所有客户端。
-- 每 **1 秒** 发送 `timer` 事件。
+- 每 **10 ms** 广播线程将出队队列中的消息批量发送给客户端。
+- 每 **1 秒** 触发 `timer` 事件——但仅推送给订阅了 `timer` 的客户端。
 
 ---
 
@@ -151,7 +154,7 @@ const ws = new WebSocket('ws://127.0.0.1:48521');
 
 ### Push 事件格式
 
-服务端主动推送的事件不含 `id` 字段：
+Push 事件仅发送给订阅了其 `type` 的客户端（见 [订阅](#订阅)）。服务端主动推送的事件不含 `id` 字段：
 
 ```json
 {
@@ -490,6 +493,80 @@ const ws = new WebSocket('ws://127.0.0.1:48521');
 {
   "type": "airport_runway_activity_changed",
   "data": {}
+}
+```
+
+---
+
+## 订阅
+
+Push 事件**默认不推送**。客户端必须订阅需要的事件类型，只有订阅的客户端才会收到对应事件；没有任何客户端订阅某事件时，该事件对应的 EuroScope 回调会被完全跳过（不做序列化与推送）。
+
+- 订阅是**按客户端**的（每个 WebSocket 连接拥有各自的订阅集合）。
+- 客户端断开连接时订阅自动清除。
+- 未知的事件类型字符串会被接受但永远不会产生事件；全部 Push 事件类型见 [Push 事件（服务端 → 客户端）](#push-事件服务端--客户端)。
+
+### subscribe
+
+将给定的事件类型加入该客户端的订阅集合。可重复调用——再次调用并传入更多类型时追加订阅。
+
+**请求示例：**
+
+```json
+{ "type": "subscribe", "id": "sub-1", "data": { "events": ["radar_update", "flightplan_update", "timer"] } }
+```
+
+| 参数 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `data.events` | string[] | ✅ | 要订阅的事件类型 |
+
+**响应示例：**
+
+```json
+{
+  "type": "response",
+  "id": "sub-1",
+  "data": {
+    "success": true,
+    "events": ["flightplan_update", "radar_update", "timer"]
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `data.success` | bool | `true` |
+| `data.events` | string[] | 操作完成后该客户端当前的完整订阅集合 |
+
+### unsubscribe
+
+将给定的事件类型从该客户端的订阅集合中移除。若省略 `data.events` 或传入空数组，则**清空全部订阅**。
+
+**请求示例：**
+
+```json
+{ "type": "unsubscribe", "id": "sub-2", "data": { "events": ["timer"] } }
+
+// 清空全部订阅
+{ "type": "unsubscribe", "id": "sub-3" }
+```
+
+| 参数 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `data.events` | string[] | 否 | 要取消订阅的事件类型；省略或传 `[]` 表示清空全部 |
+
+响应格式与 `subscribe` 相同（`success` + 当前 `events`）。
+
+**错误示例**（`data.events` 不是数组）：
+
+```json
+{
+  "type": "response",
+  "id": "sub-1",
+  "data": {
+    "success": false,
+    "error": "Invalid 'events' field; expected an array of strings"
+  }
 }
 ```
 

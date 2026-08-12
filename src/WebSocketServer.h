@@ -23,6 +23,7 @@
 #include <atomic>
 #include <thread>
 #include <map>
+#include <set>
 #include <mutex>
 #include <functional>
 #include <windows.h>
@@ -70,9 +71,21 @@ public:
 
     // --- Message routing ---
     //
-    // Broadcast: deliver a message to every handshake-complete client.
+    // Broadcast: deliver a push event to every client that subscribed to the
+    // given event type (subscription-based push, not default broadcast).
     // Used for push events (radar_update, timer, full_snapshot, etc.).
-    void Broadcast(const std::string& msg);
+    void Broadcast(const std::string& type, const std::string& msg);
+
+    // HasSubscribers: whether at least one connected client has subscribed to
+    // the given event type. Lets EuroScope callbacks skip their work entirely
+    // when nobody is interested in the event.
+    bool HasSubscribers(const std::string& type);
+
+    // HandleSubscriptionRequest: process a "subscribe" / "unsubscribe" request
+    // (client_id is injected into the request JSON by OnMessage). Returns the
+    // JSON response to send back to the client, or an empty string if the
+    // request should be ignored.
+    std::string HandleSubscriptionRequest(const std::string& requestJson);
 
     // RouteOutgoing: deliver a message to a specific client (by clientId),
     // or broadcast to all when clientId is empty.
@@ -103,10 +116,15 @@ private:
     struct ClientSession {
         std::string clientId;       // UUID, assigned in on_open
         bool handshakeDone = false;
+        std::set<std::string> subscriptions;  // subscribed push event types
 
         explicit ClientSession(std::string id)
             : clientId(std::move(id)), handshakeDone(true) {}
     };
+
+    // Send a message to every handshake-complete client (no subscription filter).
+    // Caller must hold m_clientsMutex.
+    void SendToAllLocked(const std::string& msg);
 
     // --- WebSocket++ event handlers ---
     bool OnValidate(ConnectionHdl hdl);
@@ -132,6 +150,9 @@ private:
     std::mutex m_clientsMutex;
     std::map<ConnectionHdl, std::shared_ptr<ClientSession>, std::owner_less<ConnectionHdl>> m_sessions;
     std::map<std::string, ConnectionHdl> m_clientIdToHdl;
+    // Per-event-type subscriber count (protected by m_clientsMutex) so that
+    // HasSubscribers is an O(1) lookup on the hot callback path.
+    std::map<std::string, size_t> m_subscriptionCounts;
 
     // Callbacks
     std::function<void(const std::string&)> m_errorCallback;

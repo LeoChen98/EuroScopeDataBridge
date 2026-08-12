@@ -38,7 +38,10 @@ public partial class MainViewModel : ObservableObject
     private string _statusText = "Disconnected";
 
     [ObservableProperty]
-    private ObservableCollection<string> _logEntries = new();
+    private ObservableCollection<LogEntry> _logEntries = new();
+
+    [ObservableProperty]
+    private LogEntry? _selectedLogEntry;
 
     [ObservableProperty]
     private ObservableCollection<FlightPlanData> _flightPlans = new();
@@ -134,6 +137,28 @@ public partial class MainViewModel : ObservableObject
         Application.Current.Dispatcher.Invoke(() => LogEntries.Clear());
     }
 
+    private bool CanCopyLogJson() => SelectedLogEntry?.JsonText is not null;
+
+    [RelayCommand(CanExecute = nameof(CanCopyLogJson))]
+    private void CopyLogJson()
+    {
+        var json = SelectedLogEntry?.JsonText;
+        if (json is null) return;
+        try
+        {
+            Clipboard.SetText(json);
+        }
+        catch (Exception ex)
+        {
+            AddLog($"Copy failed: {ex.Message}");
+        }
+    }
+
+    partial void OnSelectedLogEntryChanged(LogEntry? value)
+    {
+        CopyLogJsonCommand.NotifyCanExecuteChanged();
+    }
+
     private void OnMessageReceived(string json)
     {
         Application.Current.Dispatcher.Invoke(() =>
@@ -143,7 +168,7 @@ public partial class MainViewModel : ObservableObject
             {
                 var msg = JsonSerializer.Deserialize<BridgeMessage>(json);
                 if (msg == null) return;
-                AddLog($"← [{msg.Type}]: {Truncate(json, 200)}");
+                AddLog($"← [{msg.Type}]: {Truncate(json, 200)}", json);
                 switch (msg.Type)
                 {
                     case "flightplan_update":
@@ -322,10 +347,10 @@ public partial class MainViewModel : ObservableObject
         });
     }
 
-    private void AddLog(string entry)
+    private void AddLog(string entry, string? jsonText = null)
     {
         var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
-        LogEntries.Add($"[{timestamp}] {entry}");
+        LogEntries.Add(new LogEntry($"[{timestamp}] {entry}", jsonText));
     }
 
     private void UpsertFlightPlan(FlightPlanData fp)

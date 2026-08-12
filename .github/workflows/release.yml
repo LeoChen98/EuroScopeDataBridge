@@ -15,6 +15,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 根据触发 tag（release/<major>.<minor>.<patch>）自动改写 src/Constants.h 中的版本号，
+      # 使 release build 产物携带与 tag 一致的版本信息。仅改版本相关行，其余内容保持不变。
+      - name: Bump plugin version from tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^release/', '' -replace '^v', ''
+          $parts = $version.Split('.')
+          if ($parts.Count -lt 3) {
+            throw "Cannot parse version from tag '$tag' (expected release/<major>.<minor>.<patch>)"
+          }
+          $major = $parts[0]
+          $minor = $parts[1]
+          $patch = $parts[2]
+          $path = 'src/Constants.h'
+          $content = [System.IO.File]::ReadAllText($path)
+          $content = [regex]::Replace($content, '(PLUGIN_VERSION\s+")[^"]*(")', "`${1}$version`${2}")
+          $content = [regex]::Replace($content, '(PLUGIN_VERSION_MAJOR\s+)\d+', "`${1}$major")
+          $content = [regex]::Replace($content, '(PLUGIN_VERSION_MINOR\s+)\d+', "`${1}$minor")
+          $content = [regex]::Replace($content, '(PLUGIN_VERSION_PATCH\s+)\d+', "`${1}$patch")
+          [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))
+          Write-Host "Bumped PLUGIN_VERSION to $version ($major.$minor.$patch) in $path"
+
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 

@@ -579,7 +579,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
          //else
          //    fp.ClearEstimation(point.c_str());
          //return MakeSuccess(id);
-         MakeError(id,"SDK version not supported.");
+         return MakeError(id,"SDK version not supported.");
      }
 
     if (type == msg_type::SET_FLIGHT_STRIP_ANNOTATION)

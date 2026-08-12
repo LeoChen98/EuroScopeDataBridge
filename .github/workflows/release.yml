@@ -63,6 +63,11 @@ jobs:
             git push origin HEAD:main
             Write-Host "Version bump $version committed and pushed to main"
           }
+          # 恢复工作区到触发 tag 的 commit，并应用已 bump 的版本文件，
+          # 确保后续 Build 基于 tag 内容（而非 origin/main 可能更新的代码）构建。
+          git checkout --detach "${{ github.sha }}"
+          git checkout ci/version-commit -- src/Constants.h
+          Write-Host "Restored working tree to tag ${{ github.ref_name }} with bumped version"
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2

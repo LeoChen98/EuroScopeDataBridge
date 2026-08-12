@@ -319,7 +319,16 @@ public partial class MainViewModel : ObservableObject
 
     private void OnLogMessage(string msg)
     {
-        Application.Current.Dispatcher.Invoke(() => AddLog(msg));
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            // Sent lines carry the full request JSON after the fixed prefix,
+            // so they get the json attached for the copy action as well.
+            const string sentPrefix = "Sent: ";
+            var json = msg.StartsWith(sentPrefix, StringComparison.Ordinal)
+                ? msg[sentPrefix.Length..]
+                : null;
+            AddLog(msg, json);
+        });
     }
 
     private void OnConnectionChanged(bool connected)

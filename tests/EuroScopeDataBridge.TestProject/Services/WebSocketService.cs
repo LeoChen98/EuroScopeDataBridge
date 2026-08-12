@@ -97,7 +97,7 @@ public class WebSocketService : IDisposable
         }
     }
 
-    public async Task SendRequestAsync(string requestType, object? data = null)
+    public async Task<string?> SendRequestAsync(string requestType, object? data = null)
     {
         var request = new Models.BridgeRequest
         {
@@ -112,6 +112,7 @@ public class WebSocketService : IDisposable
         };
         var json = JsonSerializer.Serialize(request);
         await SendAsync(json);
+        return request.Id;
     }
 
     private async Task ReceiveLoopAsync()

@@ -26,12 +26,70 @@ public class BridgeMessage
 
 /// <summary>
 /// Flight plan data matching the bridge JSON schema.
+///
+/// The bridge serializes a flight plan as a flat top-level object with two
+/// nested sub-objects (see docs/wiki_CN.md → FlightPlan / FlightPlanData /
+/// ControllerAssignedData):
+///   - top-level:            callsign, final_altitude, cleared_altitude, ...
+///   - flight_plan_data:     origin, destination, alternate, route,
+///                           aircraft_type, ...
+///   - controller_assigned_data: squawk, scratchpad, assigned_speed,
+///                           assigned_heading, ...
+/// The nested fields are surfaced as flat read-only properties so the DataGrid
+/// columns map 1:1 to the real packet fields.
 /// </summary>
 public class FlightPlanData
 {
     [JsonPropertyName("callsign")]
     public string Callsign { get; set; } = string.Empty;
 
+    [JsonPropertyName("cleared_altitude")]
+    public int ClearedAltitude { get; set; }
+
+    [JsonPropertyName("final_altitude")]
+    public int FinalAltitude { get; set; }
+
+    [JsonPropertyName("flight_plan_data")]
+    public FlightPlanRawData? FlightPlanRawData { get; set; }
+
+    [JsonPropertyName("controller_assigned_data")]
+    public ControllerAssignedData? ControllerAssignedData { get; set; }
+
+    // --- Flat display properties mapped from the nested sub-objects ---
+
+    /// <summary>Maps to flight_plan_data.origin.</summary>
+    public string Origin => FlightPlanRawData?.Origin ?? string.Empty;
+
+    /// <summary>Maps to flight_plan_data.destination.</summary>
+    public string Destination => FlightPlanRawData?.Destination ?? string.Empty;
+
+    /// <summary>Maps to flight_plan_data.alternate.</summary>
+    public string Alternate => FlightPlanRawData?.Alternate ?? string.Empty;
+
+    /// <summary>Maps to flight_plan_data.route.</summary>
+    public string Route => FlightPlanRawData?.Route ?? string.Empty;
+
+    /// <summary>Maps to flight_plan_data.aircraft_type.</summary>
+    public string AircraftType => FlightPlanRawData?.AircraftType ?? string.Empty;
+
+    /// <summary>Maps to controller_assigned_data.squawk.</summary>
+    public string Squawk => ControllerAssignedData?.Squawk ?? string.Empty;
+
+    /// <summary>Maps to controller_assigned_data.scratchpad.</summary>
+    public string Scratchpad => ControllerAssignedData?.Scratchpad ?? string.Empty;
+
+    /// <summary>Maps to controller_assigned_data.assigned_speed.</summary>
+    public int Speed => ControllerAssignedData?.AssignedSpeed ?? 0;
+
+    /// <summary>Maps to controller_assigned_data.assigned_heading.</summary>
+    public int Heading => ControllerAssignedData?.AssignedHeading ?? 0;
+}
+
+/// <summary>
+/// flight_plan_data sub-object of a flight plan (only fields consumed by the UI).
+/// </summary>
+public class FlightPlanRawData
+{
     [JsonPropertyName("origin")]
     public string Origin { get; set; } = string.Empty;
 
@@ -46,24 +104,24 @@ public class FlightPlanData
 
     [JsonPropertyName("aircraft_type")]
     public string AircraftType { get; set; } = string.Empty;
+}
 
+/// <summary>
+/// controller_assigned_data sub-object of a flight plan (only fields consumed by the UI).
+/// </summary>
+public class ControllerAssignedData
+{
     [JsonPropertyName("squawk")]
     public string Squawk { get; set; } = string.Empty;
-
-    [JsonPropertyName("cleared_altitude")]
-    public int ClearedAltitude { get; set; }
-
-    [JsonPropertyName("final_altitude")]
-    public int FinalAltitude { get; set; }
 
     [JsonPropertyName("scratchpad")]
     public string Scratchpad { get; set; } = string.Empty;
 
-    [JsonPropertyName("speed")]
-    public int Speed { get; set; }
+    [JsonPropertyName("assigned_speed")]
+    public int AssignedSpeed { get; set; }
 
-    [JsonPropertyName("heading")]
-    public int Heading { get; set; }
+    [JsonPropertyName("assigned_heading")]
+    public int AssignedHeading { get; set; }
 }
 
 /// <summary>
@@ -91,6 +149,17 @@ public class RadarTargetData
 
     [JsonPropertyName("position")]
     public RadarPositionData? Position { get; set; }
+
+    // --- Flat display properties mapped from the nested position object ---
+
+    /// <summary>Maps to position.latitude.</summary>
+    public double Latitude => Position?.Latitude ?? 0;
+
+    /// <summary>Maps to position.longitude.</summary>
+    public double Longitude => Position?.Longitude ?? 0;
+
+    /// <summary>Maps to position.flight_level.</summary>
+    public int FlightLevel => Position?.FlightLevel ?? 0;
 }
 
 /// <summary>
@@ -115,9 +184,6 @@ public class RadarPositionData
 
     [JsonPropertyName("reported_heading")]
     public int ReportedHeading { get; set; }
-
-    [JsonPropertyName("vertical_rate")]
-    public int VerticalRate { get; set; }
 }
 
 /// <summary>

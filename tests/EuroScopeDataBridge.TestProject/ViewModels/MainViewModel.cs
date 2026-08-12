@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json;
@@ -15,6 +16,11 @@ namespace EuroScopeDataBridge.TestProject.ViewModels;
 public partial class MainViewModel : ObservableObject
 {
     private readonly WebSocketService _wsService;
+
+    // Tracks outstanding request ids so a response is routed to the table that
+    // matches the request that produced it (flight plans / radar targets /
+    // controllers must not be mixed, they only share the "callsign" field).
+    private readonly Dictionary<string, string> _pendingRequestTypes = new();
 
     [ObservableProperty]
     private string _host = "127.0.0.1";
@@ -98,21 +104,27 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task GetFlightPlansAsync()
     {
-        await _wsService.SendRequestAsync("get_flightplans");
+        var id = await _wsService.SendRequestAsync("get_flightplans");
+        if (!string.IsNullOrEmpty(id))
+            _pendingRequestTypes[id] = "flightplans";
         AddLog("→ Requested flight plans");
     }
 
     [RelayCommand]
     private async Task GetRadarTargetsAsync()
     {
-        await _wsService.SendRequestAsync("get_radar_targets");
+        var id = await _wsService.SendRequestAsync("get_radar_targets");
+        if (!string.IsNullOrEmpty(id))
+            _pendingRequestTypes[id] = "radar_targets";
         AddLog("→ Requested radar targets");
     }
 
     [RelayCommand]
     private async Task GetControllersAsync()
     {
-        await _wsService.SendRequestAsync("get_controllers");
+        var id = await _wsService.SendRequestAsync("get_controllers");
+        if (!string.IsNullOrEmpty(id))
+            _pendingRequestTypes[id] = "controllers";
         AddLog("→ Requested controllers");
     }
 
@@ -168,7 +180,7 @@ public partial class MainViewModel : ObservableObject
 
                     case "response":
                         if (msg.Data.HasValue)
-                            ProcessResponseData(msg.Data.Value);
+                            ProcessResponseData(msg.Id, msg.Data.Value);
                         break;
 
                     case "error":
@@ -219,7 +231,7 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private void ProcessResponseData(JsonElement data)
+    private void ProcessResponseData(string? id, JsonElement data)
     {
         // Response data wraps the actual result: {"success": true, "result": [...]}
         if (!data.TryGetProperty("result", out var result))
@@ -228,10 +240,33 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        // Try each collection type against the unwrapped result array
-        TryDeserializeCollection<FlightPlanData>(result, FlightPlans, nameof(FlightPlans));
-        TryDeserializeCollection<RadarTargetData>(result, RadarTargets, nameof(RadarTargets));
-        TryDeserializeCollection<ControllerData>(result, Controllers, nameof(Controllers));
+        // Route the result to the table matching the request that produced it.
+        // The three collection types share the "callsign" field, so a blind
+        // try-every-type approach would mix radar targets into the flight plan
+        // table (and vice versa).
+        if (id != null && _pendingRequestTypes.TryGetValue(id, out var requestType))
+        {
+            _pendingRequestTypes.Remove(id);
+            switch (requestType)
+            {
+                case "flightplans":
+                    TryDeserializeCollection<FlightPlanData>(result, FlightPlans, nameof(FlightPlans));
+                    break;
+                case "radar_targets":
+                    TryDeserializeCollection<RadarTargetData>(result, RadarTargets, nameof(RadarTargets));
+                    break;
+                case "controllers":
+                    TryDeserializeCollection<ControllerData>(result, Controllers, nameof(Controllers));
+                    break;
+                default:
+                    AddLog($"← Response for untracked request type '{requestType}'");
+                    break;
+            }
+        }
+        else
+        {
+            AddLog($"← Response (id='{id ?? ""}') without tracked request; ignored");
+        }
 
         AddLog($"← Response received ({result.ValueKind})");
     }
@@ -264,10 +299,26 @@ public partial class MainViewModel : ObservableObject
 
     private void OnConnectionChanged(bool connected)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        Application.Current.Dispatcher.Invoke(async () =>
         {
             IsConnected = connected;
             StatusText = connected ? "Connected" : "Disconnected";
+            if (connected)
+            {
+                // Push events are subscription-based: subscribe to the event
+                // types this test client consumes.
+                await _wsService.SendRequestAsync("subscribe", new Dictionary<string, object>
+                {
+                    ["events"] = new[]
+                    {
+                        "radar_update",
+                        "flightplan_update",
+                        "flightplan_disconnect",
+                        "controller_update",
+                        "controller_disconnect"
+                    }
+                });
+            }
         });
     }
 

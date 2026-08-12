@@ -66,19 +66,60 @@
         <!-- Data Tabs -->
         <TabControl Grid.Row="2" Margin="0,0,0,6">
             <TabItem Header="Flight Plans">
-                <DataGrid ItemsSource="{Binding FlightPlans}" AutoGenerateColumns="True"
+                <DataGrid ItemsSource="{Binding FlightPlans}" AutoGenerateColumns="False"
                           IsReadOnly="True" SelectionMode="Single"
-                          SelectedItem="{Binding SelectedFlightPlan}"/>
+                          SelectedItem="{Binding SelectedFlightPlan}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Callsign" Binding="{Binding Callsign}"/>
+                        <DataGridTextColumn Header="Origin" Binding="{Binding Origin}"/>
+                        <DataGridTextColumn Header="Destination" Binding="{Binding Destination}"/>
+                        <DataGridTextColumn Header="Alternate" Binding="{Binding Alternate}"/>
+                        <DataGridTextColumn Header="Route" Binding="{Binding Route}"/>
+                        <DataGridTextColumn Header="Aircraft Type" Binding="{Binding AircraftType}"/>
+                        <DataGridTextColumn Header="Squawk" Binding="{Binding Squawk}"/>
+                        <DataGridTextColumn Header="Cleared Alt" Binding="{Binding ClearedAltitude}"/>
+                        <DataGridTextColumn Header="Final Alt" Binding="{Binding FinalAltitude}"/>
+                        <DataGridTextColumn Header="Scratchpad" Binding="{Binding Scratchpad}"/>
+                        <DataGridTextColumn Header="Speed" Binding="{Binding Speed}"/>
+                        <DataGridTextColumn Header="Heading" Binding="{Binding Heading}"/>
+                    </DataGrid.Columns>
+                </DataGrid>
             </TabItem>
             <TabItem Header="Radar Targets">
-                <DataGrid ItemsSource="{Binding RadarTargets}" AutoGenerateColumns="True"
+                <DataGrid ItemsSource="{Binding RadarTargets}" AutoGenerateColumns="False"
                           IsReadOnly="True" SelectionMode="Single"
-                          SelectedItem="{Binding SelectedRadarTarget}"/>
+                          SelectedItem="{Binding SelectedRadarTarget}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Callsign" Binding="{Binding Callsign}"/>
+                        <DataGridTextColumn Header="System ID" Binding="{Binding SystemId}"/>
+                        <DataGridTextColumn Header="Vert Speed" Binding="{Binding VerticalSpeed}"/>
+                        <DataGridTextColumn Header="Track Hdg" Binding="{Binding TrackHeading}"/>
+                        <DataGridTextColumn Header="Ground Speed" Binding="{Binding GroundSpeed}"/>
+                        <DataGridTextColumn Header="Correlated" Binding="{Binding CorrelatedCallsign}"/>
+                        <DataGridTextColumn Header="Latitude" Binding="{Binding Latitude}"/>
+                        <DataGridTextColumn Header="Longitude" Binding="{Binding Longitude}"/>
+                        <DataGridTextColumn Header="Flight Level" Binding="{Binding FlightLevel}"/>
+                    </DataGrid.Columns>
+                </DataGrid>
             </TabItem>
             <TabItem Header="Controllers">
-                <DataGrid ItemsSource="{Binding Controllers}" AutoGenerateColumns="True"
+                <DataGrid ItemsSource="{Binding Controllers}" AutoGenerateColumns="False"
                           IsReadOnly="True" SelectionMode="Single"
-                          SelectedItem="{Binding SelectedController}"/>
+                          SelectedItem="{Binding SelectedController}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Callsign" Binding="{Binding Callsign}"/>
+                        <DataGridTextColumn Header="Position ID" Binding="{Binding PositionId}"/>
+                        <DataGridTextColumn Header="Full Name" Binding="{Binding FullName}"/>
+                        <DataGridTextColumn Header="Frequency" Binding="{Binding PrimaryFrequency}"/>
+                        <DataGridTextColumn Header="Facility" Binding="{Binding Facility}"/>
+                        <DataGridTextColumn Header="Rating" Binding="{Binding Rating}"/>
+                        <DataGridTextColumn Header="Is Controller" Binding="{Binding IsController}"/>
+                        <DataGridTextColumn Header="Range" Binding="{Binding Range}"/>
+                        <DataGridTextColumn Header="Sector File" Binding="{Binding SectorFile}"/>
+                        <DataGridTextColumn Header="Is Breaking" Binding="{Binding IsBreaking}"/>
+                        <DataGridTextColumn Header="Ongoing Able" Binding="{Binding IsOngoingAble}"/>
+                    </DataGrid.Columns>
+                </DataGrid>
             </TabItem>
         </TabControl>
 

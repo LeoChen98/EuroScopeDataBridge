@@ -14,6 +14,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # 完整历史：后续步骤需要 commit 并 push 回 main，shallow clone 会因缺少父对象导致 push 失败
+          fetch-depth: 0
 
       # 根据触发 tag（release/<major>.<minor>.<patch>）自动改写 src/Constants.h 中的版本号，
       # 使 release build 产物携带与 tag 一致的版本信息。仅改版本相关行，其余内容保持不变。

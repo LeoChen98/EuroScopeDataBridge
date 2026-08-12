@@ -413,6 +413,7 @@ vcpkg_installed/
 SectorFileProviderDescriptor.txt
 ipaddr.txt
 version.txt
+euroscope_sector_providers.txt
 
 # Third-party sentry configuration files
 .sentry-native/

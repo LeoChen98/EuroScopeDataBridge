@@ -38,6 +38,32 @@ jobs:
           [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))
           Write-Host "Bumped PLUGIN_VERSION to $version ($major.$minor.$patch) in $path"
 
+      # 将上面的版本号修改持久化提交到 main 分支（基于最新 origin/main，覆盖为 tag 版本号），
+      # 保证 main 上的 src/Constants.h 与 release tag 保持一致。commit message 带 [skip ci]
+      # 以避免触发 build-main.yml 的重复构建。
+      - name: Commit version bump to main
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^release/', '' -replace '^v', ''
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # 备份 Bump 步骤修改后的文件，再切到最新 main 应用
+          Copy-Item src/Constants.h "$env:RUNNER_TEMP\Constants.h.bumped"
+          git fetch origin main
+          git checkout -- src/Constants.h
+          git checkout -B ci/version-commit origin/main
+          Copy-Item "$env:RUNNER_TEMP\Constants.h.bumped" src/Constants.h
+          git add src/Constants.h
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Version unchanged on main, nothing to commit"
+          } else {
+            git commit -m "chore: bump plugin version to $version [skip ci]"
+            git push origin HEAD:main
+            Write-Host "Version bump $version committed and pushed to main"
+          }
+
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 

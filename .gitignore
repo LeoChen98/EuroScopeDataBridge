@@ -416,3 +416,7 @@ version.txt
 
 # Third-party sentry configuration files
 .sentry-native/
+
+# reasonix
+.reasonix/
+reasonix.toml

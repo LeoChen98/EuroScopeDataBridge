@@ -51,6 +51,7 @@ namespace msg_type {
     constexpr auto METAR_RECEIVED                = "metar_received";
     constexpr auto PLANE_INFO                    = "plane_info";
     constexpr auto TIMER                         = "timer";
+    constexpr auto AIRPORT_RUNWAY_ACTIVITY_CHANGED = "airport_runway_activity_changed";
 
     // Request (client → server) — Queries
     constexpr auto GET_FLIGHTPLANS               = "get_flightplans";
@@ -107,6 +108,10 @@ namespace msg_type {
     constexpr auto SET_ESTIMATION                = "set_estimation";
     constexpr auto CLEAR_ESTIMATION              = "clear_estimation";
 
+    // Request (client → server) — Subscription control
+    constexpr auto SUBSCRIBE                     = "subscribe";
+    constexpr auto UNSUBSCRIBE                   = "unsubscribe";
+
     // Voice channel toggles
     constexpr auto TOGGLE_PRIMARY                = "toggle_primary";
     constexpr auto TOGGLE_ATIS                   = "toggle_atis";
@@ -135,6 +140,7 @@ namespace json_key {
     constexpr auto SUCCESS  = "success";
     constexpr auto ERROR    = "error";
     constexpr auto COUNTER  = "counter";
+    constexpr auto EVENTS   = "events";
 
     // Routing (internal, not exposed to clients)
     constexpr auto CLIENT_ID = "client_id";

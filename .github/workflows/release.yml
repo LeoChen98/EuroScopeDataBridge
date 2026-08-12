@@ -40,6 +40,8 @@ jobs:
           $content = [regex]::Replace($content, '(PLUGIN_VERSION_PATCH\s+)\d+', "`${1}$patch")
           [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))
           Write-Host "Bumped PLUGIN_VERSION to $version ($major.$minor.$patch) in $path"
+          # 暴露纯版本号（如 3.1.5）供后续步骤（draft release 标题）使用
+          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       # 将上面的版本号修改持久化提交到 main 分支（基于最新 origin/main，覆盖为 tag 版本号），
       # 保证 main 上的 src/Constants.h 与 release tag 保持一致。commit message 带 [skip ci]
@@ -90,7 +92,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
+          name: ${{ env.RELEASE_VERSION }}
           draft: true
           generate_release_notes: true
           # 只附加主工程输出（dll/lib/exp/pdb），排除 obj 中间目录；不包含测试工程产物

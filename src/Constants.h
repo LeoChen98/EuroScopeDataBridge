@@ -6,14 +6,14 @@
 
 // --- Plugin Identity ---
 #define   PLUGIN_NAME         "EuroScope Data Bridge"
-#define   PLUGIN_VERSION      "1.1.0"
+#define   PLUGIN_VERSION      "1.1.1"
 #define   PLUGIN_AUTHOR       "Leo Chen"
 #define   PLUGIN_COPYRIGHT    "MIT License"
 
 // Numeric version parts (used by the Win32 version resource, Resource.rc).
 #define   PLUGIN_VERSION_MAJOR   1
 #define   PLUGIN_VERSION_MINOR   1
-#define   PLUGIN_VERSION_PATCH   0
+#define   PLUGIN_VERSION_PATCH   1
 
 namespace edb {
 
@@ -21,11 +21,19 @@ namespace edb {
 constexpr int    WS_PORT                 = 48521;
 
 
-// Max bytes buffered per client before oldest frames are dropped.
+// Max outbound bytes buffered per client before the server drops new frames
+// (backpressure guard against unbounded memory growth / bad_alloc; enforced in
+// WebSocketServer::IsSendQueueFull via connection::get_buffered_amount()).
 constexpr size_t MAX_CLIENT_SEND_QUEUE_BYTES = 32 * 1024 * 1024;  // 32 MB
 
-// Max frames queued per client (hard cap regardless of byte count).
+// Frame-count cap. NOT enforced at runtime: websocketpp exposes no public API
+// to query the number of queued frames, so backpressure is byte-based only.
 constexpr size_t MAX_CLIENT_SEND_QUEUE_FRAMES = 8192;
+
+// Interval (ms) of the dedicated drain thread that processes incoming client
+// requests. Kept independent of EuroScope's OnTimer so requests are serviced
+// even when the EuroScope timer callback is stalled or absent.
+constexpr int DRAIN_INTERVAL_MS = 100;
 
 // --- Connection Limits ---
 constexpr int    MAX_CLIENTS             = 64;    // hard cap on concurrent WebSocket clients

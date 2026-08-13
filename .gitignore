@@ -421,3 +421,4 @@ euroscope_sector_providers.txt
 # reasonix
 .reasonix/
 reasonix.toml
+AGENTS.md

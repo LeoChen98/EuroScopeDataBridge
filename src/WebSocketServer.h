@@ -126,6 +126,11 @@ private:
     // Caller must hold m_clientsMutex.
     void SendToAllLocked(const std::string& msg);
 
+    // Backpressure check: returns true if queueing payloadSize more bytes on
+    // this client would exceed MAX_CLIENT_SEND_QUEUE_BYTES (slow consumer guard,
+    // prevents unbounded memory growth / bad_alloc). Caller must hold m_clientsMutex.
+    bool IsSendQueueFull(ConnectionHdl hdl, size_t payloadSize);
+
     // --- WebSocket++ event handlers ---
     bool OnValidate(ConnectionHdl hdl);
     void OnOpen(ConnectionHdl hdl);
@@ -144,7 +149,9 @@ private:
 
     WsServer m_server;
     std::thread m_ioThread;
+    std::thread m_drainThread;
     std::atomic<bool> m_running;
+    std::atomic<bool> m_drainRunning{false};
 
     // Client session management (protected by m_clientsMutex)
     std::mutex m_clientsMutex;

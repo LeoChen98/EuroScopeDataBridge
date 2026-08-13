@@ -6,6 +6,8 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <vector>
+#include <chrono>
 #include <rpc.h>        // UuidCreate / UuidToStringA
 
 using json = nlohmann::json;
@@ -13,16 +15,34 @@ using json = nlohmann::json;
 namespace edb {
 
 // ============================================================================
-// GenerateClientId — UUID via Windows UuidCreate (unchanged from original)
+// GenerateClientId — UUID via Windows UuidCreate, with a safe fallback
 // ============================================================================
 std::string WebSocketServer::GenerateClientId() {
+    static std::atomic<unsigned long long> fallbackCounter{0};
+
     UUID uuid;
-    UuidCreate(&uuid);
     RPC_CSTR szUuid = nullptr;
-    UuidToStringA(&uuid, &szUuid);
-    std::string id(reinterpret_cast<const char*>(szUuid));
-    RpcStringFreeA(&szUuid);
-    return id;
+    if (UuidCreate(&uuid) == RPC_S_OK &&
+        UuidToStringA(&uuid, &szUuid) == RPC_S_OK &&
+        szUuid != nullptr)
+    {
+        std::string id(reinterpret_cast<const char*>(szUuid));
+        RpcStringFreeA(&szUuid);
+        return id;
+    }
+    if (szUuid != nullptr)
+        RpcStringFreeA(&szUuid);
+
+    // Fallback: local timestamp + monotonic counter (never touches a null pointer)
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    char buf[80];
+    snprintf(buf, sizeof(buf), "%04u%02u%02u-%02u%02u%02u-%llu",
+             static_cast<unsigned>(st.wYear), static_cast<unsigned>(st.wMonth),
+             static_cast<unsigned>(st.wDay), static_cast<unsigned>(st.wHour),
+             static_cast<unsigned>(st.wMinute), static_cast<unsigned>(st.wSecond),
+             static_cast<unsigned long long>(fallbackCounter.fetch_add(1)));
+    return std::string(buf);
 }
 
 // ============================================================================
@@ -104,8 +124,33 @@ bool WebSocketServer::Start() {
             m_server.run();
         } catch (const std::exception& e) {
             std::cerr << "[DataBridge] ASIO run() exception: " << e.what() << std::endl;
+            m_running.store(false);
+        } catch (...) {
+            std::cerr << "[DataBridge] ASIO run() unknown exception" << std::endl;
+            m_running.store(false);
+        }
+        // run() only returns normally after stop(); if it returns while the
+        // server is still marked running, the IO loop died unexpectedly.
+        if (m_running.exchange(false)) {
+            std::cerr << "[DataBridge] ASIO run() returned unexpectedly; server stopped." << std::endl;
         }
         std::cout << "[DataBridge] ASIO run() returned" << std::endl;
+    });
+
+    // Start the drain thread: periodically processes incoming client requests
+    // on its own schedule, independent of EuroScope's OnTimer callback.
+    // NOTE: the request processor runs here, so any EuroScope SDK access it
+    // performs happens off the EuroScope main thread.
+    m_drainRunning.store(true);
+    m_drainThread = std::thread([this]() {
+        while (m_drainRunning.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(DRAIN_INTERVAL_MS));
+            try {
+                DrainIncomingQueue();
+            } catch (...) {
+                std::cerr << "[DataBridge] Exception in drain thread" << std::endl;
+            }
+        }
     });
 
     {
@@ -120,24 +165,38 @@ bool WebSocketServer::Start() {
 // Stop
 // ============================================================================
 void WebSocketServer::Stop() {
-    if (!m_running.load())
-        return;
+    // Stop the drain thread first so no request processing races shutdown.
+    m_drainRunning.store(false);
+    if (m_drainThread.joinable())
+        m_drainThread.join();
 
-    m_running.store(false);
+    if (m_running.load()) {
+        m_running.store(false);
 
-    websocketpp::lib::error_code ec;
-    m_server.stop_listening(ec);
+        websocketpp::lib::error_code ec;
+        m_server.stop_listening(ec);
 
-    {
-        std::lock_guard<std::mutex> lock(m_clientsMutex);
-        for (auto& pair : m_sessions) {
-            websocketpp::lib::error_code closeEc;
-            m_server.close(pair.first, websocketpp::close::status::going_away, "Server shutting down", closeEc);
+        // Collect the handles under the lock, then close them without holding it —
+        // avoids any lock-order inversion with IO-thread close/fail handlers.
+        std::vector<ConnectionHdl> hdls;
+        {
+            std::lock_guard<std::mutex> lock(m_clientsMutex);
+            hdls.reserve(m_sessions.size());
+            for (auto& pair : m_sessions) {
+                hdls.push_back(pair.first);
+            }
         }
+        for (auto& hdl : hdls) {
+            websocketpp::lib::error_code closeEc;
+            m_server.close(hdl, websocketpp::close::status::going_away, "Server shutting down", closeEc);
+        }
+
+        m_server.stop();
     }
 
-    m_server.stop();
-
+    // Always join the IO thread: it may have exited early (run() threw) after
+    // setting m_running=false itself. Skipping join in that case would leave
+    // the thread joinable, and ~std::thread would call std::terminate.
     if (m_ioThread.joinable())
         m_ioThread.join();
 
@@ -239,14 +298,16 @@ void WebSocketServer::OnMessage(ConnectionHdl hdl, WsServer::message_ptr msg) {
 
     try {
         json j = json::parse(payload);
-        if (!j.contains(json_key::TYPE)) {
+        // Reject non-object payloads: contains()/operator[] on a string, array
+        // or number would throw type_error(305).
+        if (!j.is_object() || !j.contains(json_key::TYPE)) {
             return;
         }
 
         j[json_key::CLIENT_ID] = clientId;
         m_incomingQueue.Push(j.dump());
 
-    } catch (const json::parse_error&) {
+    } catch (const json::exception&) {
         json err;
         err[json_key::TYPE] = msg_type::ERROR;
         err[json_key::DATA][json_key::ERROR] = "Invalid JSON";
@@ -263,6 +324,8 @@ void WebSocketServer::Broadcast(const std::string& type, const std::string& msg)
     std::lock_guard<std::mutex> lock(m_clientsMutex);
     for (auto& pair : m_sessions) {
         if (pair.second->handshakeDone && pair.second->subscriptions.count(type) > 0) {
+            if (IsSendQueueFull(pair.first, msg.size()))
+                continue;  // backpressure: drop frame for a slow consumer
             websocketpp::lib::error_code ec;
             m_server.send(pair.first, msg, websocketpp::frame::opcode::text, ec);
         }
@@ -286,9 +349,12 @@ std::string WebSocketServer::HandleSubscriptionRequest(const std::string& reques
     json req;
     try {
         req = json::parse(requestJson);
-    } catch (const json::parse_error&) {
+    } catch (const json::exception&) {
         return "";
     }
+    // find() on a non-object value would throw type_error(305).
+    if (!req.is_object())
+        return "";
 
     std::string id;
     auto idIt = req.find(json_key::ID);
@@ -400,6 +466,12 @@ void WebSocketServer::RouteOutgoing(const std::string& msg, const std::string& c
     std::lock_guard<std::mutex> lock(m_clientsMutex);
     auto it = m_clientIdToHdl.find(clientId);
     if (it != m_clientIdToHdl.end()) {
+        if (IsSendQueueFull(it->second, msg.size())) {
+            // Backpressure: drop the request/response for a slow consumer.
+            // Log to stderr only (this can repeat while the client is stuck).
+            std::cerr << "[DataBridge] Dropping response for slow client " << clientId << std::endl;
+            return;
+        }
         websocketpp::lib::error_code ec;
         m_server.send(it->second, msg, websocketpp::frame::opcode::text, ec);
     }
@@ -411,10 +483,25 @@ void WebSocketServer::RouteOutgoing(const std::string& msg, const std::string& c
 void WebSocketServer::SendToAllLocked(const std::string& msg) {
     for (auto& pair : m_sessions) {
         if (pair.second->handshakeDone) {
+            if (IsSendQueueFull(pair.first, msg.size()))
+                continue;  // backpressure: drop frame for a slow consumer
             websocketpp::lib::error_code ec;
             m_server.send(pair.first, msg, websocketpp::frame::opcode::text, ec);
         }
     }
+}
+
+// ============================================================================
+// IsSendQueueFull — backpressure guard against unbounded outbound buffering
+// ============================================================================
+bool WebSocketServer::IsSendQueueFull(ConnectionHdl hdl, size_t payloadSize) {
+    websocketpp::lib::error_code ec;
+    auto con = m_server.get_con_from_hdl(hdl, ec);
+    if (ec || !con)
+        return false;  // dead/unknown connection: let send() report the error
+    // Note: MAX_CLIENT_SEND_QUEUE_FRAMES is not enforceable via the public
+    // websocketpp API (no frame-count query), so we guard on buffered bytes.
+    return con->get_buffered_amount() + payloadSize > MAX_CLIENT_SEND_QUEUE_BYTES;
 }
 
 } // namespace edb

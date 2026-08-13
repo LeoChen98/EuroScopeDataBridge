@@ -272,29 +272,53 @@ std::string SerializeFlightPlanToJson(CFlightPlan& fp)
     j["coordinated_next_controller_state"]  = fp.GetCoordinatedNextControllerState();
 
     // -- Sub-objects (temporary, serialize inline) --
+    // Each sub-object is serialized defensively: a failure in one must not
+    // abort serialization of the whole flight plan (CFlightPlanExtractedRoute
+    // and CFlightPlanPositionPredictions expose no IsValid() to pre-check).
+    // Client-visible effect: a failed sub-object serializes as an empty object.
     {
         CFlightPlanData fpd = fp.GetFlightPlanData();
-        j["flight_plan_data"] = json::parse(SerializeFlightPlanDataToJson(fpd));
+        try {
+            j["flight_plan_data"] = json::parse(SerializeFlightPlanDataToJson(fpd));
+        } catch (...) {
+            j["flight_plan_data"] = json::object();
+        }
     }
 
     {
         CFlightPlanControllerAssignedData cad = fp.GetControllerAssignedData();
-        j["controller_assigned_data"] = json::parse(SerializeControllerAssignedDataToJson(cad));
+        try {
+            j["controller_assigned_data"] = json::parse(SerializeControllerAssignedDataToJson(cad));
+        } catch (...) {
+            j["controller_assigned_data"] = json::object();
+        }
     }
 
     {
         CFlightPlanExtractedRoute route = fp.GetExtractedRoute();
-        j["extracted_route"] = json::parse(SerializeExtractedRouteToJson(route));
+        try {
+            j["extracted_route"] = json::parse(SerializeExtractedRouteToJson(route));
+        } catch (...) {
+            j["extracted_route"] = json::object();
+        }
     }
 
     {
         CFlightPlanPositionPredictions pred = fp.GetPositionPredictions();
-        j["position_predictions"] = json::parse(SerializePositionPredictionsToJson(pred));
+        try {
+            j["position_predictions"] = json::parse(SerializePositionPredictionsToJson(pred));
+        } catch (...) {
+            j["position_predictions"] = json::object();
+        }
     }
 
     {
         CRadarTargetPositionData trackPos = fp.GetFPTrackPosition();
-        j["track_position"] = json::parse(SerializeRadarTargetPositionDataToJson(trackPos));
+        try {
+            j["track_position"] = json::parse(SerializeRadarTargetPositionDataToJson(trackPos));
+        } catch (...) {
+            j["track_position"] = json::object();
+        }
     }
 
     return j.dump();
@@ -332,17 +356,26 @@ std::string SerializeRadarTargetToJson(CRadarTarget& rt)
         j["correlated_callsign"] = nullptr;
     }
 
-    // Position data (temporary, serialize inline)
+    // Position data (temporary, serialize inline) — isolated so a failure in
+    // the SDK position data cannot abort serialization of the radar target.
     {
         CRadarTargetPositionData pos = rt.GetPosition();
-        j["position"] = json::parse(SerializeRadarTargetPositionDataToJson(pos));
+        try {
+            j["position"] = json::parse(SerializeRadarTargetPositionDataToJson(pos));
+        } catch (...) {
+            j["position"] = json::object();
+        }
 
         // Position history (walk back through previous positions)
         json history = json::array();
         CRadarTargetPositionData prev = rt.GetPreviousPosition(pos);
         while (prev.IsValid())
         {
-            history.push_back(json::parse(SerializeRadarTargetPositionDataToJson(prev)));
+            try {
+                history.push_back(json::parse(SerializeRadarTargetPositionDataToJson(prev)));
+            } catch (...) {
+                // skip this history entry and keep walking
+            }
             prev = rt.GetPreviousPosition(prev);
         }
         j["position_history"] = std::move(history);

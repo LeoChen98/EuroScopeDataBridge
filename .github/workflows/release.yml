@@ -2,6 +2,8 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'release/*'
 
@@ -18,39 +20,90 @@ jobs:
           # 完整历史：后续步骤需要 commit 并 push 回 main，shallow clone 会因缺少父对象导致 push 失败
           fetch-depth: 0
 
-      # 根据触发 tag（release/<major>.<minor>.<patch>）自动改写 src/Constants.h 中的版本号，
-      # 使 release build 产物携带与 tag 一致的版本信息。仅改版本相关行，其余内容保持不变。
+      # 根据触发 ref 决定版本来源：
+      # - push release/<major>.<minor>.<patch> tag（路径 A）：只响应直接打在 main 上的 tag——
+      #   校验 tag 指向的 commit 是 origin/main 的祖先；通过后保留原行为：用 tag 名改写 src/Constants.h
+      #   并提交回 main，再构建发布。tag 不在 main 上（如打在 feature 分支）则跳过。
+      # - push main 分支（路径 B，如其他分支 merge 到 main）：读取 src/Constants.h 的 PLUGIN_VERSION，
+      #   与最近可达的 release tag 对比；版本有更新（或尚无任何 release tag）则给当前 commit 打上
+      #   release/<新版本> tag 并 push，由 tag push 触发的标准 release 流程完成构建与发布，本 run 结束。
       - name: Bump plugin version from tag
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          $version = $tag -replace '^release/', '' -replace '^v', ''
-          $parts = $version.Split('.')
-          if ($parts.Count -lt 3) {
-            throw "Cannot parse version from tag '$tag' (expected release/<major>.<minor>.<patch>)"
+          $ref = "${{ github.ref }}"
+          if ($ref -like 'refs/tags/release/*') {
+            # ── 路径 A：tag push（只响应直接打在 main 上的 tag）──
+            git fetch origin main 2>$null
+            git merge-base --is-ancestor HEAD refs/remotes/origin/main 2>$null
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "Tag ${{ github.ref_name }} is not on main; skipping release"
+              "SKIP_RELEASE=true" | Out-File -FilePath $env:GITHUB_ENV -Append
+              exit 0
+            }
+            $tag = "${{ github.ref_name }}"
+            $version = $tag -replace '^release/', '' -replace '^v', ''
+            $parts = $version.Split('.')
+            if ($parts.Count -lt 3) {
+              throw "Cannot parse version from tag '$tag' (expected release/<major>.<minor>.<patch>)"
+            }
+            $major = $parts[0]
+            $minor = $parts[1]
+            $patch = $parts[2]
+            $path = 'src/Constants.h'
+            $content = [System.IO.File]::ReadAllText($path)
+            $content = [regex]::Replace($content, '(PLUGIN_VERSION\s+")[^"]*(")', "`${1}$version`${2}")
+            $content = [regex]::Replace($content, '(PLUGIN_VERSION_MAJOR\s+)\d+', "`${1}$major")
+            $content = [regex]::Replace($content, '(PLUGIN_VERSION_MINOR\s+)\d+', "`${1}$minor")
+            $content = [regex]::Replace($content, '(PLUGIN_VERSION_PATCH\s+)\d+', "`${1}$patch")
+            [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))
+            Write-Host "Bumped PLUGIN_VERSION to $version ($major.$minor.$patch) in $path"
+            "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+            "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
+          } else {
+            # ── 路径 B：push main 分支（merge 或其他提交）──
+            $content = [System.IO.File]::ReadAllText('src/Constants.h')
+            $m = [regex]::Match($content, 'PLUGIN_VERSION\s+"([^"]+)"')
+            if (-not $m.Success) {
+              throw "Cannot read PLUGIN_VERSION from src/Constants.h"
+            }
+            $newVersion = $m.Groups[1].Value.Trim()
+            try {
+              $null = [version]$newVersion
+            } catch {
+              throw "Cannot parse version '$newVersion' from src/Constants.h (expected X.Y.Z)"
+            }
+            # 与最近可达的 release tag 对比
+            $prevTag = git describe --tags --abbrev=0 --match 'release/*' HEAD 2>$null
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrEmpty($prevTag)) {
+              $prevVersion = $prevTag -replace '^release/', '' -replace '^v', ''
+              if ([version]$newVersion -le [version]$prevVersion) {
+                Write-Host "Version $newVersion is not newer than previous tag $prevTag; skipping"
+                "SKIP_RELEASE=true" | Out-File -FilePath $env:GITHUB_ENV -Append
+                exit 0
+              }
+            } else {
+              Write-Host "No previous release tag found; treating $newVersion as first release"
+            }
+            # 版本有更新：给当前 commit（更新所在的提交）打 release tag 并 push，
+            # tag push 会触发标准 release 流程（路径 A），本 run 结束。
+            $newTag = "release/$newVersion"
+            git tag $newTag HEAD
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create tag $newTag" }
+            git push origin $newTag
+            if ($LASTEXITCODE -ne 0) { throw "Failed to push tag $newTag" }
+            Write-Host "Created and pushed tag $newTag for version $newVersion"
+            "SKIP_RELEASE=true" | Out-File -FilePath $env:GITHUB_ENV -Append
+            exit 0
           }
-          $major = $parts[0]
-          $minor = $parts[1]
-          $patch = $parts[2]
-          $path = 'src/Constants.h'
-          $content = [System.IO.File]::ReadAllText($path)
-          $content = [regex]::Replace($content, '(PLUGIN_VERSION\s+")[^"]*(")', "`${1}$version`${2}")
-          $content = [regex]::Replace($content, '(PLUGIN_VERSION_MAJOR\s+)\d+', "`${1}$major")
-          $content = [regex]::Replace($content, '(PLUGIN_VERSION_MINOR\s+)\d+', "`${1}$minor")
-          $content = [regex]::Replace($content, '(PLUGIN_VERSION_PATCH\s+)\d+', "`${1}$patch")
-          [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))
-          Write-Host "Bumped PLUGIN_VERSION to $version ($major.$minor.$patch) in $path"
-          # 暴露纯版本号（如 3.1.5）供后续步骤（draft release 标题）使用
-          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      # 将上面的版本号修改持久化提交到 main 分支（基于最新 origin/main，覆盖为 tag 版本号），
+      # 将上面的版本号修改持久化提交到 main 分支（基于最新 origin/main，覆盖为 release 版本号），
       # 保证 main 上的 src/Constants.h 与 release tag 保持一致。commit message 带 [skip ci]
       # 以避免触发 build-main.yml 的重复构建。
       - name: Commit version bump to main
+        if: env.SKIP_RELEASE != 'true'
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          $version = $tag -replace '^release/', '' -replace '^v', ''
+          $version = $env:RELEASE_VERSION
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           # 备份 Bump 步骤修改后的文件，再切到最新 main 应用
@@ -68,16 +121,18 @@ jobs:
             git push origin HEAD:main
             Write-Host "Version bump $version committed and pushed to main"
           }
-          # 恢复工作区到触发 tag 的 commit，并应用已 bump 的版本文件，
+          # 恢复工作区到触发 commit，并应用已 bump 的版本文件，
           # 确保后续 Build 基于 tag 内容（而非 origin/main 可能更新的代码）构建。
           git checkout --detach "${{ github.sha }}"
           git checkout ci/version-commit -- src/Constants.h
-          Write-Host "Restored working tree to tag ${{ github.ref_name }} with bumped version"
+          Write-Host "Restored working tree to $env:RELEASE_TAG with bumped version"
 
       - name: Setup MSBuild
+        if: env.SKIP_RELEASE != 'true'
         uses: microsoft/setup-msbuild@v2
 
       - name: Install vcpkg dependencies
+        if: env.SKIP_RELEASE != 'true'
         shell: pwsh
         run: |
           git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
@@ -86,14 +141,16 @@ jobs:
           & "$env:RUNNER_TEMP\vcpkg\vcpkg.exe" install --triplet x86-windows
 
       - name: Build EuroScopeDataBridge (Release, Win32)
+        if: env.SKIP_RELEASE != 'true'
         run: msbuild EuroScopeDataBridge.vcxproj -p:Configuration=Release -p:Platform=Win32 -p:SolutionDir="${{ github.workspace }}\" -m
 
       - name: Publish Draft Release
+        if: env.SKIP_RELEASE != 'true'
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ github.ref_name }}
+          tag: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_VERSION }}
           draft: true
-          generate_release_notes: true
+          generateReleaseNotes: true
           # 只附加主工程输出（dll/lib/exp/pdb），排除 obj 中间目录；不包含测试工程产物
           artifacts: 'Release/*,!Release/obj'

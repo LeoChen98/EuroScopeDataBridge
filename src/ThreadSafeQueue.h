@@ -69,12 +69,18 @@ public:
     // --- Drain ---
     // Pop all available items without blocking. Returns number drained.
     // Items are appended to `out` via callback.
+    // A callback exception aborts only the current item; remaining items are
+    // still processed so one bad message can't stall the whole queue.
     template<typename F>
     size_t Drain(F&& callback) {
         size_t count = 0;
         std::string item;
         while (TryPop(item)) {
-            callback(std::move(item));
+            try {
+                callback(std::move(item));
+            } catch (...) {
+                // ignore: continue with the remaining messages
+            }
             ++count;
         }
         return count;

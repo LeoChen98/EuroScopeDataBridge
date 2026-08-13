@@ -6,6 +6,7 @@
 
 #include <string>
 #include <vector>
+#include <utility>
 
 using json = nlohmann::json;
 using namespace EuroScopePlugIn;
@@ -17,14 +18,37 @@ namespace {
 // Response helpers
 // ============================================================================
 
+// Parse a JSON string produced by our serializers. Returns {false, null} on
+// failure so the caller can skip the record instead of aborting the batch.
+// NOTE: never use `if (json)` — nlohmann::json has no operator bool; the
+// templated operator ValueType() would instantiate get<bool>() and throw
+// type_error(302) on any non-boolean value.
+std::pair<bool, json> SafeParse(const std::string& s)
+{
+    try {
+        return {true, json::parse(s)};
+    } catch (...) {
+        return {false, json()};
+    }
+}
+
 std::string MakeResponse(const std::string& id, bool success, const std::string& resultJson, const std::string& error)
 {
     json resp;
     resp[json_key::TYPE] = msg_type::RESPONSE;
     resp[json_key::ID] = id;
     resp[json_key::DATA][json_key::SUCCESS] = success;
-    if (!resultJson.empty())
-        resp[json_key::DATA]["result"] = json::parse(resultJson);
+    if (!resultJson.empty()) {
+        auto parsed = SafeParse(resultJson);
+        if (parsed.first)
+            resp[json_key::DATA]["result"] = std::move(parsed.second);
+        else {
+            // Serializer output unexpectedly invalid: report failure instead of
+            // silently returning success with a missing result.
+            resp[json_key::DATA][json_key::SUCCESS] = false;
+            resp[json_key::DATA][json_key::ERROR] = "Failed to serialize result";
+        }
+    }
     if (!error.empty())
         resp[json_key::DATA][json_key::ERROR] = error;
     return resp.dump();
@@ -80,10 +104,13 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
     json req;
     try {
         req = json::parse(requestJson);
-    } catch (const json::parse_error&) {
+    } catch (const json::exception&) {
         // Malformed JSON; ignore silently
         return "";
     }
+    // find()/contains() on a non-object value would throw type_error(305).
+    if (!req.is_object())
+        return MakeError("", "Invalid request: expected a JSON object");
 
     std::string id;
     auto idIt = req.find(json_key::ID);
@@ -112,20 +139,20 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!callsign.empty())
         {
             CFlightPlan fp = plugin.FlightPlanSelect(callsign.c_str());
-            if (fp.IsValid())
-                result.push_back(json::parse(SerializeFlightPlanToJson(fp)));
+            if (fp.IsValid()) {
+                auto parsed = SafeParse(SerializeFlightPlanToJson(fp));
+                if (parsed.first)
+                    result.push_back(std::move(parsed.second));
+            }
         }
         else
         {
             CFlightPlan fp = plugin.FlightPlanSelectFirst();
             while (fp.IsValid())
             {
-                try {
-                    result.push_back(json::parse(SerializeFlightPlanToJson(fp)));
-                }
-                catch (...) {
-                }
-
+                auto parsed = SafeParse(SerializeFlightPlanToJson(fp));
+                if (parsed.first)
+                    result.push_back(std::move(parsed.second));
                 fp = plugin.FlightPlanSelectNext(fp);
             }
         }
@@ -138,15 +165,20 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!callsign.empty())
         {
             CRadarTarget rt = plugin.RadarTargetSelect(callsign.c_str());
-            if (rt.IsValid())
-                result.push_back(json::parse(SerializeRadarTargetToJson(rt)));
+            if (rt.IsValid()) {
+                auto parsed = SafeParse(SerializeRadarTargetToJson(rt));
+                if (parsed.first)
+                    result.push_back(std::move(parsed.second));
+            }
         }
         else
         {
             CRadarTarget rt = plugin.RadarTargetSelectFirst();
             while (rt.IsValid())
             {
-                result.push_back(json::parse(SerializeRadarTargetToJson(rt)));
+                auto parsed = SafeParse(SerializeRadarTargetToJson(rt));
+                if (parsed.first)
+                    result.push_back(std::move(parsed.second));
                 rt = plugin.RadarTargetSelectNext(rt);
             }
         }
@@ -158,13 +190,18 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         json result = json::array();
 
         CController myself = plugin.ControllerMyself();
-        if (myself.IsValid())
-            result.push_back(json::parse(SerializeControllerToJson(myself)));
+        if (myself.IsValid()) {
+            auto parsed = SafeParse(SerializeControllerToJson(myself));
+            if (parsed.first)
+                result.push_back(std::move(parsed.second));
+        }
 
         CController ctr = plugin.ControllerSelectFirst();
         while (ctr.IsValid())
         {
-            result.push_back(json::parse(SerializeControllerToJson(ctr)));
+            auto parsed = SafeParse(SerializeControllerToJson(ctr));
+            if (parsed.first)
+                result.push_back(std::move(parsed.second));
             ctr = plugin.ControllerSelectNext(ctr);
         }
         return MakeSuccess(id, result.dump());
@@ -179,7 +216,9 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         CSectorElement se = plugin.SectorFileElementSelectFirst(filterType);
         while (se.IsValid())
         {
-            result.push_back(json::parse(SerializeSectorElementToJson(se)));
+            auto parsed = SafeParse(SerializeSectorElementToJson(se));
+            if (parsed.first)
+                result.push_back(std::move(parsed.second));
             se = plugin.SectorFileElementSelectNext(se, filterType);
         }
         return MakeSuccess(id, result.dump());
@@ -191,7 +230,9 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         CGrountToAirChannel ch = plugin.GroundToArChannelSelectFirst();
         while (ch.IsValid())
         {
-            result.push_back(json::parse(SerializeVoiceChannelToJson(ch)));
+            auto parsed = SafeParse(SerializeVoiceChannelToJson(ch));
+            if (parsed.first)
+                result.push_back(std::move(parsed.second));
             ch = plugin.GroundToArChannelSelectNext(ch);
         }
         return MakeSuccess(id, result.dump());
@@ -225,7 +266,9 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         while (fp.IsValid())
         {
             std::string fpJson = SerializeFlightPlanToJson(fp);
-            result["flightplans"].push_back(json::parse(fpJson));
+            auto parsed = SafeParse(fpJson);
+            if (parsed.first)
+                result["flightplans"].push_back(std::move(parsed.second));
             fp = plugin.FlightPlanSelectNext(fp);
         }
 
@@ -234,7 +277,9 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         while (rt.IsValid())
         {
             std::string rtJson = SerializeRadarTargetToJson(rt);
-            result["radar_targets"].push_back(json::parse(rtJson));
+            auto parsed = SafeParse(rtJson);
+            if (parsed.first)
+                result["radar_targets"].push_back(std::move(parsed.second));
             rt = plugin.RadarTargetSelectNext(rt);
         }
 
@@ -243,7 +288,9 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         while (ctr.IsValid())
         {
             std::string ctrJson = SerializeControllerToJson(ctr);
-            result["controllers"].push_back(json::parse(ctrJson));
+            auto parsed = SafeParse(ctrJson);
+            if (parsed.first)
+                result["controllers"].push_back(std::move(parsed.second));
             ctr = plugin.ControllerSelectNext(ctr);
         }
 
@@ -252,7 +299,9 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (myself.IsValid())
         {
             std::string myJson = SerializeControllerToJson(myself);
-            result["controllers"].push_back(json::parse(myJson));
+            auto parsed = SafeParse(myJson);
+            if (parsed.first)
+                result["controllers"].push_back(std::move(parsed.second));
         }
 
         return MakeSuccess(id, result.dump());

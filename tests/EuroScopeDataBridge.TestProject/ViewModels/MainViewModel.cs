@@ -29,7 +29,13 @@ public partial class MainViewModel : ObservableObject
     private int _port = 48521;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsNotConnected))]
     private bool _isConnected;
+
+    /// <summary>Inverse of <see cref="IsConnected"/>; used by the Connect button's
+    /// IsEnabled binding. Raised whenever IsConnected changes.</summary>
+    public bool IsNotConnected => !IsConnected;
+
 
     [ObservableProperty]
     private string _customCommand = "{\"type\":\"get_flightplans\"}";

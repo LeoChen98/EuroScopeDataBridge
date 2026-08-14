@@ -1,20 +1,20 @@
 # EuroScope Data Bridge
 
-[中文版](./README_CN.md)
+**Language: English | [中文](./README_CN.md)**
 
 An EuroScope simulation ATC plugin DLL that exposes live flight data through a local WebSocket API. It lets external programs subscribe to events such as runway activity changes, radar position updates and flight plan changes, as well as actively query and modify EuroScope data.
 
 ## Architecture
 
 ```
-┌─────────────────────┐     WebSocket (ws://127.0.0.1:48521)     ┌──────────────────┐
-│  EuroScope (main thread) │ ◄──────────────────────────────────────► │  External clients │
-│                      │    JSON Push Events + Request/Response    │  (web pages /    │
-│  DataBridgePlugin    │                                          │   scripts / data │
-│  ├─ ES Callbacks     │                                          │   analysis tools)│
-│  ├─ OnTimer → Drain  │                                          └──────────────────┘
-│  └─ FullSnapshot     │
-└──────────────────────┘
+┌───────────────────────────┐     WebSocket (ws://127.0.0.1:48521)      ┌──────────────────┐
+│  EuroScope (main thread)  │ ◄──────────────────────────────────────►  │ External clients │
+│                           │    JSON Push Events + Request/Response    │  (web pages /    │
+│  DataBridgePlugin         │                                           │   scripts / data │
+│  ├─ ES Callbacks          │                                           │   analysis tools)│
+│  ├─ OnTimer → Drain       │                                           └──────────────────┘
+│  └─ FullSnapshot          │
+└───────────────────────────┘
 ```
 
 - **Push mode (subscription-based)**: EuroScope callback events (radar, flight plans, controllers, chat, METAR, etc.) are automatically serialized to JSON. A client must first `subscribe` to the event types it is interested in; only subscribed clients receive the matching events. When no client has subscribed to an event type, its callback is skipped entirely (no serialization, no push).

@@ -1,17 +1,17 @@
 # EuroScope Data Bridge
 
-[English](./README.md)
+**语言：[English](./README.md) | 中文**
 
 EuroScope 模拟飞行管制插件 DLL，通过本地 WebSocket API 对外暴露实时飞行数据，支持外部程序订阅跑道活动状态变化、雷达位置更新、飞行计划变更等事件，以及主动查询和修改 EuroScope 数据。
 
 ## 架构
 
 ```
-┌─────────────────────┐     WebSocket (ws://127.0.0.1:48521)     ┌──────────────────┐
-│  EuroScope (主线程)  │ ◄──────────────────────────────────────► │  外部客户端        │
+┌──────────────────────┐     WebSocket (ws://127.0.0.1:48521)      ┌──────────────────┐
+│  EuroScope (主线程)   │ ◄──────────────────────────────────────► │  外部客户端       │
 │                      │    JSON Push Events + Request/Response    │  (网页 / 脚本 /   │
-│  DataBridgePlugin    │                                          │   数据分析工具)    │
-│  ├─ ES Callbacks     │                                          └──────────────────┘
+│  DataBridgePlugin    │                                           │   数据分析工具)   │
+│  ├─ ES Callbacks     │                                           └──────────────────┘
 │  ├─ OnTimer → Drain  │
 │  └─ FullSnapshot     │
 └──────────────────────┘

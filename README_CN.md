@@ -1,5 +1,7 @@
 # EuroScope Data Bridge
 
+[English](./README.md)
+
 EuroScope 模拟飞行管制插件 DLL，通过本地 WebSocket API 对外暴露实时飞行数据，支持外部程序订阅跑道活动状态变化、雷达位置更新、飞行计划变更等事件，以及主动查询和修改 EuroScope 数据。
 
 ## 架构

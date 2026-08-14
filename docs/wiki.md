@@ -1,5 +1,7 @@
 # EuroScope Data Bridge — API Documentation
 
+[中文版](./wiki_CN.md)
+
 ## Table of contents
 
 - [Overview](#overview)

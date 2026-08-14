@@ -1,5 +1,7 @@
 # EuroScope Data Bridge — API 文档
 
+[English](./wiki.md)
+
 ## 目录
 
 - [概述](#概述)

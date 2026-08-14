@@ -1,5 +1,7 @@
 # EuroScope Data Bridge
 
+[中文版](./README_CN.md)
+
 An EuroScope simulation ATC plugin DLL that exposes live flight data through a local WebSocket API. It lets external programs subscribe to events such as runway activity changes, radar position updates and flight plan changes, as well as actively query and modify EuroScope data.
 
 ## Architecture

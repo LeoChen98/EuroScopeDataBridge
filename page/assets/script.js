@@ -116,7 +116,7 @@
         );
         if (!m) return;
         verEls.forEach(function (el) {
-          el.textContent = m[0];
+          el.textContent = 'v' + m[0];
           el.title = 'Latest GitHub release: ' + tag;
         });
       })

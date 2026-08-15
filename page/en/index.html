@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EuroScope Data Bridge — Real-time flight data bridge plugin</title>
+<meta name="description" content="EuroScope Data Bridge is a EuroScope ATC plugin DLL that exposes live flight data through a local WebSocket API (ws://127.0.0.1:48521), with subscription-based push and on-demand query/modification.">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body class="home">
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.35"/><circle cx="12" cy="12" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.7"/><path d="M12 12 L18.6 5.4" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/></svg>
+      <span class="brand-name">EuroScope <em>Data Bridge</em></span>
+    </a>
+    <nav class="nav-links">
+      <a href="index.html" class="active">Home</a>
+      <a href="wiki.html">Docs</a>
+      <a class="nav-lang" href="../zh/index.html">中文</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- ======================= Hero ======================= -->
+  <section class="hero">
+    <p class="eyebrow">EuroScope Plugin · WebSocket API</p>
+    <h1>EuroScope <span class="accent">Data Bridge</span></h1>
+    <p class="hero-sub">A plugin DLL for the EuroScope ATC simulator: it starts a local WebSocket server and exposes live radar, flight plan and controller data as JSON — with subscription-based push and on-demand query/modification.</p>
+    <div class="hero-cta">
+      <a class="btn" href="wiki.html">Read the docs →</a>
+      <a class="btn ghost" href="https://github.com/LeoChen98/EuroscopeDataBridge" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+    <div class="badges">
+      <span class="badge">v1.1.1</span>
+      <span class="badge">C++17</span>
+      <span class="badge">Win32 · x86</span>
+      <span class="badge">JSON</span>
+      <span class="badge">MIT</span>
+    </div>
+    <div class="hero-stats">
+      <div class="stat"><span class="stat-v">ws://127.0.0.1:48521</span><span class="stat-k">Local WebSocket endpoint</span></div>
+      <div class="stat"><span class="stat-v">13</span><span class="stat-k">Push event types</span></div>
+      <div class="stat"><span class="stat-v">55</span><span class="stat-k">Requests &amp; actions</span></div>
+      <div class="stat"><span class="stat-v">64</span><span class="stat-k">Max concurrent clients</span></div>
+    </div>
+  </section>
+
+  <!-- ======================= 01 About ======================= -->
+  <section class="sec" id="about">
+    <p class="sec-label">01 · About</p>
+    <h2>What is Data Bridge?</h2>
+    <p>EuroScope Data Bridge is a plugin DLL that runs inside EuroScope. Once loaded it automatically starts a WebSocket server on the local <code>127.0.0.1:48521</code>. External programs (web pages, scripts, data-analysis tools) can subscribe to events such as runway activity changes, radar position updates and flight plan changes, or actively query and modify EuroScope data. All communication uses JSON text — a simple protocol with no third-party runtime dependencies.</p>
+    <div class="about-grid">
+      <div class="about-item"><span class="k">Connection</span><span class="v">WebSocket, listening on <code>127.0.0.1</code> (loopback only)</span></div>
+      <div class="about-item"><span class="k">Protocol</span><span class="v">JSON text messages: request / response / push events</span></div>
+      <div class="about-item"><span class="k">Threading</span><span class="v">Requests processed on the EuroScope main thread via a thread-safe queue</span></div>
+      <div class="about-item"><span class="k">Backpressure</span><span class="v">32 MB per-client send queue cap guards against unbounded memory growth</span></div>
+    </div>
+  </section>
+
+  <!-- ======================= 02 Architecture ======================= -->
+  <section class="sec" id="architecture">
+    <p class="sec-label">02 · Architecture</p>
+    <h2>Architecture</h2>
+    <p>The plugin runs as a DLL inside the EuroScope process: it collects data through EuroScope SDK callbacks and pushes it to external clients through the built-in WebSocket server.</p>
+    <div class="diagram">
+      <div class="diagram-node">
+        <h3>EuroScope (main thread)</h3>
+        <p>DataBridgePlugin<br>ES Callbacks · OnTimer → Drain<br>FullSnapshot</p>
+      </div>
+      <div class="diagram-link">
+        <span class="wire">ws://127.0.0.1:48521</span>
+        <span class="arr">◄── JSON ──►</span>
+      </div>
+      <div class="diagram-node">
+        <h3>External clients</h3>
+        <p>Web pages / scripts / data tools<br>JSON Push Events<br>Request / Response</p>
+      </div>
+    </div>
+    <ul class="mode-list">
+      <li><strong>Push mode (subscription-based)</strong> — EuroScope callback events are automatically serialized to JSON. A client must first <code>subscribe</code> to the event types it is interested in; only subscribed clients receive the matching events. When no client has subscribed to an event type, its callback is skipped entirely (no serialization, no push).</li>
+      <li><strong>Pull / Request mode</strong> — clients send JSON requests (e.g. <code>get_flightplans</code>, <code>get_full_snapshot</code>), which are processed on the EuroScope main thread, with results returned over WebSocket.</li>
+      <li><strong>Timed events</strong> — a <code>timer</code> event (with a tick counter) fires once per second, likewise only pushed to clients that subscribed to it — handy for polling or heartbeat detection.</li>
+    </ul>
+  </section>
+
+  <!-- ======================= 03 Features ======================= -->
+  <section class="sec" id="features">
+    <p class="sec-label">03 · Features</p>
+    <h2>Key features</h2>
+    <div class="cards">
+      <div class="card">
+        <span class="idx">PUSH / 01</span>
+        <h3>Subscription push</h3>
+        <p>13 real-time event types — radar updates, flight plan changes, controller logins, chat, METAR and more — delivered precisely per client subscription.</p>
+      </div>
+      <div class="card">
+        <span class="idx">REQUEST / 02</span>
+        <h3>Request / response</h3>
+        <p>55 requests and actions: snapshot queries, squawk and altitude changes, handoff coordination, voice channel toggles — responses matched by <code>id</code>.</p>
+      </div>
+      <div class="card">
+        <span class="idx">TIMER / 03</span>
+        <h3>Timed heartbeat</h3>
+        <p>A once-per-second <code>timer</code> event provides a steady beat for polling and heartbeat detection.</p>
+      </div>
+      <div class="card">
+        <span class="idx">ROBUST / 04</span>
+        <h3>Robust &amp; reliable</h3>
+        <p>Main-thread processing keeps data safe; a thread-safe queue and backpressure guard handle load spikes, with automatic cleanup on disconnect.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= 04 Tech stack ======================= -->
+  <section class="sec" id="stack">
+    <p class="sec-label">04 · Tech stack</p>
+    <h2>Tech stack</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Component</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><th>C++17</th><td>DLL compilation standard</td></tr>
+          <tr><th>Visual Studio 2022 (v143)</th><td>Toolset</td></tr>
+          <tr><th>Win32 (x86)</th><td>Target platform (EuroScope is a 32-bit process)</td></tr>
+          <tr><th>websocketpp</th><td>WebSocket server (header-only, bundled)</td></tr>
+          <tr><th>nlohmann/json</th><td>JSON serialization / deserialization</td></tr>
+          <tr><th>vcpkg</th><td>C++ package manager</td></tr>
+          <tr><th>.NET 8 / WPF</th><td>Bundled test client (TestProject)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ======================= 05 Quick start ======================= -->
+  <section class="sec" id="quickstart">
+    <p class="sec-label">05 · Quick start</p>
+    <h2>Quick start</h2>
+    <div class="steps">
+      <div class="step"><p>Copy <code>EuroscopeDataBridge.dll</code> to the EuroScope plugin directory, or add the DLL path in EuroScope's plugin settings.</p></div>
+      <div class="step"><p>Start EuroScope — once loaded, the plugin automatically starts the WebSocket server at <code>ws://127.0.0.1:48521</code>.</p></div>
+      <div class="step"><p>Connect to the WebSocket, subscribe to the event types you want, then send query or modification requests.</p></div>
+      <div class="step"><p>Verify without writing code: the repository bundles a WPF test client at <code>tests/EuroScopeDataBridge.TestProject</code>.</p></div>
+    </div>
+    <div class="code-block">
+      <div class="code-head"><span class="code-lang">JavaScript</span><button class="code-copy" type="button" aria-label="Copy">Copy</button></div>
+      <pre><code>const ws = new WebSocket('ws://127.0.0.1:48521');
+
+ws.onmessage = (event) =&gt; {
+  const msg = JSON.parse(event.data);
+  console.log(msg.type, msg.data);
+};
+
+ws.onopen = () =&gt; {
+  // Subscribe to events: pushes are only delivered for subscribed types
+  ws.send(JSON.stringify({
+    type: 'subscribe', id: 'sub-1',
+    data: { events: ['radar_update', 'flightplan_update', 'timer'] }
+  }));
+
+  // Query all flight plans
+  ws.send(JSON.stringify({ type: 'get_flightplans', id: 'req-1' }));
+};</code></pre>
+    </div>
+  </section>
+
+  <!-- ======================= 06 Docs ======================= -->
+  <section class="sec" id="docs">
+    <p class="sec-label">06 · Docs</p>
+    <h2>Full documentation</h2>
+    <div class="docs-card">
+      <div>
+        <h3>API Documentation · Wiki</h3>
+        <p>Covers the connection, message formats, all 13 push events and 55 requests, the data structure reference, error handling and configuration constants — with complete request/response examples.</p>
+      </div>
+      <a class="btn" href="wiki.html">Open the docs →</a>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="foot-inner">
+    <p>EuroScope Data Bridge · MIT License © <span data-year>2026</span> Leo Chen</p>
+    <p class="foot-links">
+      <a href="https://github.com/LeoChen98/EuroscopeDataBridge" target="_blank" rel="noopener">GitHub</a>
+      <span>·</span>
+      <a href="index.html">Home</a>
+      <span>·</span>
+      <a href="wiki.html">Docs</a>
+      <span>·</span>
+      <a href="../en/index.html">English</a>
+      <span>·</span>
+      <a href="../zh/index.html">中文</a>
+    </p>
+  </div>
+</footer>
+
+<button class="to-top" id="toTop" type="button" aria-label="Back to top">↑</button>
+<script src="../assets/script.js"></script>
+</body>
+</html>

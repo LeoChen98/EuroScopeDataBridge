@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EuroScope Data Bridge — 实时飞行数据桥接插件</title>
+<meta name="description" content="EuroScope Data Bridge 是一个 EuroScope 模拟管制插件 DLL，通过本地 WebSocket API（ws://127.0.0.1:48521）对外暴露实时飞行数据，支持订阅推送与主动查询修改。">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body class="home">
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.35"/><circle cx="12" cy="12" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.7"/><path d="M12 12 L18.6 5.4" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/></svg>
+      <span class="brand-name">EuroScope <em>Data Bridge</em></span>
+    </a>
+    <nav class="nav-links">
+      <a href="index.html" class="active">首页</a>
+      <a href="wiki.html">文档</a>
+      <a class="nav-lang" href="../en/index.html">EN</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- ======================= Hero ======================= -->
+  <section class="hero">
+    <p class="eyebrow">EuroScope Plugin · WebSocket API</p>
+    <h1>EuroScope <span class="accent">Data Bridge</span></h1>
+    <p class="hero-sub">面向 EuroScope 模拟管制系统的插件 DLL：在本地启动 WebSocket 服务，将雷达、飞行计划、管制员等实时数据以 JSON 形式对外暴露，支持订阅推送与主动查询、修改。</p>
+    <div class="hero-cta">
+      <a class="btn" href="wiki.html">阅读文档 →</a>
+      <a class="btn ghost" href="https://github.com/LeoChen98/EuroscopeDataBridge" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+    <div class="badges">
+      <span class="badge">v1.1.1</span>
+      <span class="badge">C++17</span>
+      <span class="badge">Win32 · x86</span>
+      <span class="badge">JSON</span>
+      <span class="badge">MIT</span>
+    </div>
+    <div class="hero-stats">
+      <div class="stat"><span class="stat-v">ws://127.0.0.1:48521</span><span class="stat-k">本地 WebSocket 端点</span></div>
+      <div class="stat"><span class="stat-v">13</span><span class="stat-k">种推送事件</span></div>
+      <div class="stat"><span class="stat-v">55</span><span class="stat-k">种请求与操作</span></div>
+      <div class="stat"><span class="stat-v">64</span><span class="stat-k">并发客户端上限</span></div>
+    </div>
+  </section>
+
+  <!-- ======================= 01 简介 ======================= -->
+  <section class="sec" id="about">
+    <p class="sec-label">01 · 简介</p>
+    <h2>什么是 Data Bridge？</h2>
+    <p>EuroScope Data Bridge 是一个运行在 EuroScope 内部的插件 DLL。插件加载后自动在本机 <code>127.0.0.1:48521</code> 上启动 WebSocket 服务，外部程序（网页、脚本、数据分析工具）可以订阅跑道活动变化、雷达位置更新、飞行计划变更等事件，也可以主动查询和修改 EuroScope 数据。所有通信均使用 JSON 文本，协议简单、无任何第三方依赖。</p>
+    <div class="about-grid">
+      <div class="about-item"><span class="k">连接方式</span><span class="v">WebSocket，仅监听 <code>127.0.0.1</code> 本机回环地址</span></div>
+      <div class="about-item"><span class="k">通信协议</span><span class="v">JSON 文本消息：请求 / 响应 / 推送事件</span></div>
+      <div class="about-item"><span class="k">线程模型</span><span class="v">请求在 EuroScope 主线程处理，线程安全队列中转</span></div>
+      <div class="about-item"><span class="k">背压保护</span><span class="v">每客户端发送队列上限 32 MB，防止内存无限增长</span></div>
+    </div>
+  </section>
+
+  <!-- ======================= 02 架构 ======================= -->
+  <section class="sec" id="architecture">
+    <p class="sec-label">02 · 架构</p>
+    <h2>架构</h2>
+    <p>插件以 DLL 形式运行于 EuroScope 进程内部，通过 EuroScope SDK 回调采集数据，再经内置 WebSocket 服务推送给外部客户端。</p>
+    <div class="diagram">
+      <div class="diagram-node">
+        <h3>EuroScope（主线程）</h3>
+        <p>DataBridgePlugin<br>ES 回调 · OnTimer → Drain<br>FullSnapshot</p>
+      </div>
+      <div class="diagram-link">
+        <span class="wire">ws://127.0.0.1:48521</span>
+        <span class="arr">◄── JSON ──►</span>
+      </div>
+      <div class="diagram-node">
+        <h3>外部客户端</h3>
+        <p>网页 / 脚本 / 数据分析工具<br>JSON Push Events<br>Request / Response</p>
+      </div>
+    </div>
+    <ul class="mode-list">
+      <li><strong>Push（订阅推送）</strong> — EuroScope 回调事件自动序列化为 JSON。客户端需先 <code>subscribe</code> 订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件的回调会被完全跳过（零序列化、零推送）。</li>
+      <li><strong>Pull / Request（拉 / 请求模式）</strong> — 客户端发送 JSON 请求（如 <code>get_flightplans</code>、<code>get_full_snapshot</code>），请求在 EuroScope 主线程上处理，结果通过 WebSocket 返回。</li>
+      <li><strong>定时事件</strong> — <code>timer</code> 事件（含 tick 计数器）每秒触发一次，同样仅在客户端订阅后推送，便于定时轮询或心跳检测。</li>
+    </ul>
+  </section>
+
+  <!-- ======================= 03 特性 ======================= -->
+  <section class="sec" id="features">
+    <p class="sec-label">03 · 特性</p>
+    <h2>核心特性</h2>
+    <div class="cards">
+      <div class="card">
+        <span class="idx">PUSH / 01</span>
+        <h3>订阅式推送</h3>
+        <p>13 类实时事件：雷达更新、飞行计划变更、管制员上下线、聊天、METAR 等，按客户端订阅精确推送。</p>
+      </div>
+      <div class="card">
+        <span class="idx">REQUEST / 02</span>
+        <h3>请求 / 响应</h3>
+        <p>55 种请求与操作：查询快照、修改应答机与高度、移交协调、语音频道切换，响应按 <code>id</code> 一一对应。</p>
+      </div>
+      <div class="card">
+        <span class="idx">TIMER / 03</span>
+        <h3>定时心跳</h3>
+        <p>每秒一次的 <code>timer</code> 事件，为轮询与心跳检测提供稳定的节拍。</p>
+      </div>
+      <div class="card">
+        <span class="idx">ROBUST / 04</span>
+        <h3>稳健可靠</h3>
+        <p>主线程处理保证数据安全，线程安全队列与背压保护应对高负载，连接异常自动清理。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= 04 技术栈 ======================= -->
+  <section class="sec" id="stack">
+    <p class="sec-label">04 · 技术栈</p>
+    <h2>技术栈</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>组件</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th>C++17</th><td>DLL 编译标准</td></tr>
+          <tr><th>Visual Studio 2022 (v143)</th><td>工具集</td></tr>
+          <tr><th>Win32 (x86)</th><td>目标平台（EuroScope 为 32 位进程）</td></tr>
+          <tr><th>websocketpp</th><td>WebSocket 服务端（header-only，随仓库内置）</td></tr>
+          <tr><th>nlohmann/json</th><td>JSON 序列化 / 反序列化</td></tr>
+          <tr><th>vcpkg</th><td>C++ 包管理</td></tr>
+          <tr><th>.NET 8 / WPF</th><td>随附测试客户端（TestProject）</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ======================= 05 快速开始 ======================= -->
+  <section class="sec" id="quickstart">
+    <p class="sec-label">05 · 快速开始</p>
+    <h2>快速开始</h2>
+    <div class="steps">
+      <div class="step"><p>将 <code>EuroscopeDataBridge.dll</code> 复制到 EuroScope 插件目录，或在 EuroScope 插件设置中添加该 DLL 路径。</p></div>
+      <div class="step"><p>启动 EuroScope，插件加载后自动在本机 <code>ws://127.0.0.1:48521</code> 启动 WebSocket 服务。</p></div>
+      <div class="step"><p>连接 WebSocket，先订阅感兴趣的事件类型，再发送查询或修改请求。</p></div>
+      <div class="step"><p>无需编写代码即可验证：仓库附带 WPF 测试客户端 <code>tests/EuroScopeDataBridge.TestProject</code>。</p></div>
+    </div>
+    <div class="code-block">
+      <div class="code-head"><span class="code-lang">JavaScript</span><button class="code-copy" type="button" aria-label="Copy">Copy</button></div>
+      <pre><code>const ws = new WebSocket('ws://127.0.0.1:48521');
+
+ws.onmessage = (event) =&gt; {
+  const msg = JSON.parse(event.data);
+  console.log(msg.type, msg.data);
+};
+
+ws.onopen = () =&gt; {
+  // 订阅事件：订阅后才会收到对应类型的推送
+  ws.send(JSON.stringify({
+    type: 'subscribe', id: 'sub-1',
+    data: { events: ['radar_update', 'flightplan_update', 'timer'] }
+  }));
+
+  // 查询所有飞行计划
+  ws.send(JSON.stringify({ type: 'get_flightplans', id: 'req-1' }));
+};</code></pre>
+    </div>
+  </section>
+
+  <!-- ======================= 06 文档 ======================= -->
+  <section class="sec" id="docs">
+    <p class="sec-label">06 · 文档</p>
+    <h2>完整使用文档</h2>
+    <div class="docs-card">
+      <div>
+        <h3>API 文档 · Wiki</h3>
+        <p>覆盖连接方式、消息格式、全部 13 种推送事件与 55 种请求、数据结构参考、错误处理与配置常量，并附有完整请求 / 响应示例。</p>
+      </div>
+      <a class="btn" href="wiki.html">进入文档 →</a>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="foot-inner">
+    <p>EuroScope Data Bridge · MIT License © <span data-year>2026</span> Leo Chen</p>
+    <p class="foot-links">
+      <a href="https://github.com/LeoChen98/EuroscopeDataBridge" target="_blank" rel="noopener">GitHub</a>
+      <span>·</span>
+      <a href="index.html">首页</a>
+      <span>·</span>
+      <a href="wiki.html">文档</a>
+      <span>·</span>
+      <a href="../zh/index.html">中文</a>
+      <span>·</span>
+      <a href="../en/index.html">English</a>
+    </p>
+  </div>
+</footer>
+
+<button class="to-top" id="toTop" type="button" aria-label="Back to top">↑</button>
+<script src="../assets/script.js"></script>
+</body>
+</html>

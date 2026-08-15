@@ -1,0 +1,1608 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EuroScope Data Bridge — API 文档</title>
+<meta name="description" content="EuroScope Data Bridge — local WebSocket API for live EuroScope flight data. Documentation and quick start.">
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body class="wiki-body">
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="index.html">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+  <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.35"/>
+  <circle cx="12" cy="12" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" opacity="0.7"/>
+  <path d="M12 12 L18.6 5.4" stroke="currentColor" stroke-width="1.4"/>
+  <circle cx="12" cy="12" r="1.7" fill="currentColor"/>
+</svg>
+      <span class="brand-name">EuroScope <em>Data Bridge</em></span>
+    </a>
+    <nav class="nav-links">
+      <a href="index.html">首页</a>
+      <a href="wiki.html" class="active">文档</a>
+      <a class="nav-lang" href="../en/wiki.html">EN</a>
+    </nav>
+    <button class="toc-toggle" id="tocToggle" type="button" aria-label="Toggle contents">☰</button>
+  </div>
+</header>
+<aside class="toc" id="toc">
+  <div class="toc-head">ON THIS PAGE</div>
+  <nav class="toc-nav">
+    <a class="toc-link toc-l2" href="#概述">概述</a>
+    <a class="toc-link toc-l2" href="#连接">连接</a>
+    <a class="toc-link toc-l2" href="#消息格式">消息格式</a>
+    <a class="toc-link toc-l3" href="#请求格式">请求格式</a>
+    <a class="toc-link toc-l3" href="#push-事件格式">Push 事件格式</a>
+    <a class="toc-link toc-l3" href="#响应格式">响应格式</a>
+    <a class="toc-link toc-l4" href="#成功">成功</a>
+    <a class="toc-link toc-l4" href="#错误">错误</a>
+    <a class="toc-link toc-l2" href="#push-事件服务端--客户端">Push 事件（服务端 → 客户端）</a>
+    <a class="toc-link toc-l3" href="#radar_update">radar_update</a>
+    <a class="toc-link toc-l3" href="#flightplan_update">flightplan_update</a>
+    <a class="toc-link toc-l3" href="#flightplan_disconnect">flightplan_disconnect</a>
+    <a class="toc-link toc-l3" href="#controller_update">controller_update</a>
+    <a class="toc-link toc-l3" href="#controller_disconnect">controller_disconnect</a>
+    <a class="toc-link toc-l3" href="#controller_assigned_data">controller_assigned_data</a>
+    <a class="toc-link toc-l3" href="#flight_strip_pushed">flight_strip_pushed</a>
+    <a class="toc-link toc-l3" href="#chat_private">chat_private</a>
+    <a class="toc-link toc-l3" href="#chat_frequency">chat_frequency</a>
+    <a class="toc-link toc-l3" href="#metar_received">metar_received</a>
+    <a class="toc-link toc-l3" href="#plane_info">plane_info</a>
+    <a class="toc-link toc-l3" href="#timer">timer</a>
+    <a class="toc-link toc-l3" href="#airport_runway_activity_changed">airport_runway_activity_changed</a>
+    <a class="toc-link toc-l2" href="#订阅">订阅</a>
+    <a class="toc-link toc-l3" href="#subscribe">subscribe</a>
+    <a class="toc-link toc-l3" href="#unsubscribe">unsubscribe</a>
+    <a class="toc-link toc-l2" href="#请求客户端--服务端">请求（客户端 → 服务端）</a>
+    <a class="toc-link toc-l3" href="#查询类">查询类</a>
+    <a class="toc-link toc-l4" href="#get_flightplans">get_flightplans</a>
+    <a class="toc-link toc-l4" href="#get_radar_targets">get_radar_targets</a>
+    <a class="toc-link toc-l4" href="#get_controllers">get_controllers</a>
+    <a class="toc-link toc-l4" href="#get_sector_elements">get_sector_elements</a>
+    <a class="toc-link toc-l4" href="#get_voice_channels">get_voice_channels</a>
+    <a class="toc-link toc-l4" href="#get_transition_altitude">get_transition_altitude</a>
+    <a class="toc-link toc-l4" href="#get_connection_type">get_connection_type</a>
+    <a class="toc-link toc-l4" href="#get_full_snapshot">get_full_snapshot</a>
+    <a class="toc-link toc-l3" href="#设置类--controllerassigneddata">设置类 — ControllerAssignedData</a>
+    <a class="toc-link toc-l4" href="#set_squawk">set_squawk</a>
+    <a class="toc-link toc-l4" href="#set_final_altitude">set_final_altitude</a>
+    <a class="toc-link toc-l4" href="#set_cleared_altitude">set_cleared_altitude</a>
+    <a class="toc-link toc-l4" href="#set_scratchpad">set_scratchpad</a>
+    <a class="toc-link toc-l4" href="#set_speed">set_speed</a>
+    <a class="toc-link toc-l4" href="#set_mach">set_mach</a>
+    <a class="toc-link toc-l4" href="#set_rate">set_rate</a>
+    <a class="toc-link toc-l4" href="#set_heading">set_heading</a>
+    <a class="toc-link toc-l4" href="#set_direct_to">set_direct_to</a>
+    <a class="toc-link toc-l4" href="#set_communication_type">set_communication_type</a>
+    <a class="toc-link toc-l3" href="#设置类--flightplandata">设置类 — FlightPlanData</a>
+    <a class="toc-link toc-l4" href="#set_plan_type">set_plan_type</a>
+    <a class="toc-link toc-l4" href="#set_aircraft_info">set_aircraft_info</a>
+    <a class="toc-link toc-l4" href="#set_origin">set_origin</a>
+    <a class="toc-link toc-l4" href="#set_destination">set_destination</a>
+    <a class="toc-link toc-l4" href="#set_alternate">set_alternate</a>
+    <a class="toc-link toc-l4" href="#set_remarks">set_remarks</a>
+    <a class="toc-link toc-l4" href="#set_route">set_route</a>
+    <a class="toc-link toc-l4" href="#set_true_airspeed">set_true_airspeed</a>
+    <a class="toc-link toc-l4" href="#set_departure_time">set_departure_time</a>
+    <a class="toc-link toc-l4" href="#set_actual_departure_time">set_actual_departure_time</a>
+    <a class="toc-link toc-l4" href="#set_enroute_hours">set_enroute_hours</a>
+    <a class="toc-link toc-l4" href="#set_enroute_minutes">set_enroute_minutes</a>
+    <a class="toc-link toc-l4" href="#set_fuel_hours">set_fuel_hours</a>
+    <a class="toc-link toc-l4" href="#set_fuel_minutes">set_fuel_minutes</a>
+    <a class="toc-link toc-l3" href="#操作类">操作类</a>
+    <a class="toc-link toc-l4" href="#amend_flight_plan">amend_flight_plan</a>
+    <a class="toc-link toc-l4" href="#start_tracking">start_tracking</a>
+    <a class="toc-link toc-l4" href="#end_tracking">end_tracking</a>
+    <a class="toc-link toc-l4" href="#accept_handoff">accept_handoff</a>
+    <a class="toc-link toc-l4" href="#refuse_handoff">refuse_handoff</a>
+    <a class="toc-link toc-l4" href="#initiate_handoff">initiate_handoff</a>
+    <a class="toc-link toc-l4" href="#push_flight_strip">push_flight_strip</a>
+    <a class="toc-link toc-l4" href="#set_estimation">set_estimation</a>
+    <a class="toc-link toc-l4" href="#clear_estimation">clear_estimation</a>
+    <a class="toc-link toc-l4" href="#set_flight_strip_annotation">set_flight_strip_annotation</a>
+    <a class="toc-link toc-l4" href="#correlate">correlate</a>
+    <a class="toc-link toc-l4" href="#uncorrelate">uncorrelate</a>
+    <a class="toc-link toc-l4" href="#set_asel">set_asel</a>
+    <a class="toc-link toc-l4" href="#display_message">display_message</a>
+    <a class="toc-link toc-l4" href="#send_command">send_command</a>
+    <a class="toc-link toc-l3" href="#语音频道切换">语音频道切换</a>
+    <a class="toc-link toc-l4" href="#toggle_primary">toggle_primary</a>
+    <a class="toc-link toc-l4" href="#toggle_atis">toggle_atis</a>
+    <a class="toc-link toc-l4" href="#toggle_text_receive">toggle_text_receive</a>
+    <a class="toc-link toc-l4" href="#toggle_text_transmit">toggle_text_transmit</a>
+    <a class="toc-link toc-l4" href="#toggle_voice_receive">toggle_voice_receive</a>
+    <a class="toc-link toc-l4" href="#toggle_voice_transmit">toggle_voice_transmit</a>
+    <a class="toc-link toc-l2" href="#数据结构参考">数据结构参考</a>
+    <a class="toc-link toc-l3" href="#flightplan">FlightPlan</a>
+    <a class="toc-link toc-l3" href="#flightplandata">FlightPlanData</a>
+    <a class="toc-link toc-l3" href="#controllerassigneddata">ControllerAssignedData</a>
+    <a class="toc-link toc-l3" href="#extractedroute">ExtractedRoute</a>
+    <a class="toc-link toc-l3" href="#positionpredictions">PositionPredictions</a>
+    <a class="toc-link toc-l3" href="#radartargetpositiondata">RadarTargetPositionData</a>
+    <a class="toc-link toc-l3" href="#radartarget">RadarTarget</a>
+    <a class="toc-link toc-l3" href="#controller">Controller</a>
+    <a class="toc-link toc-l3" href="#sectorelement">SectorElement</a>
+    <a class="toc-link toc-l3" href="#voicechannel">VoiceChannel</a>
+    <a class="toc-link toc-l2" href="#错误处理">错误处理</a>
+    <a class="toc-link toc-l3" href="#常见错误消息">常见错误消息</a>
+    <a class="toc-link toc-l2" href="#配置常量">配置常量</a>
+  </nav>
+</aside>
+<main class="main">
+  <article class="doc">
+<h1 id="euroscope-data-bridge--api-文档">EuroScope Data Bridge — API 文档</h1>
+<h2 id="概述">概述</h2>
+<p>EuroScope Data Bridge 是一个 EuroScope 插件 DLL，在本地 <code>ws://127.0.0.1:48521</code> 启动 WebSocket 服务。所有通信均使用 JSON 格式。</p>
+<p>通信模式：</p>
+<ul><li><strong>Push（订阅推送）</strong>：EuroScope 回调事件自动序列化为 JSON。客户端需先用 <code>subscribe</code> 请求订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件对应的回调会被跳过（不做序列化与推送）。详见 <a href="#订阅">订阅</a>。</li><li><strong>Request/Response（请求/响应）</strong>：客户端发送带唯一 <code>id</code> 的请求，服务端在处理后返回带有相同 <code>id</code> 的响应。请求在 EuroScope 主线程（OnTimer）中处理，保证线程安全。</li></ul>
+<p>定时行为：</p>
+<ul><li>每 <strong>10 ms</strong> 广播线程将出队队列中的消息批量发送给客户端。</li><li>每 <strong>1 秒</strong> 触发 <code>timer</code> 事件——但仅推送给订阅了 <code>timer</code> 的客户端。</li></ul>
+<hr>
+<h2 id="连接">连接</h2>
+<div class="table-wrap"><table><thead><tr><th>属性</th><th>值</th></tr></thead><tbody><tr><td>协议</td><td>WebSocket (ws)</td></tr><tr><td>主机</td><td><code>127.0.0.1</code>（仅本地）</td></tr><tr><td>端口</td><td><code>48521</code></td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JavaScript</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-javascript">const ws = new WebSocket('ws://127.0.0.1:48521');</code></pre>
+</div>
+<hr>
+<h2 id="消息格式">消息格式</h2>
+<h3 id="请求格式">请求格式</h3>
+<p>所有客户端→服务端请求均为如下 JSON 结构：</p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;&lt;请求类型&gt;&quot;,
+  &quot;id&quot;: &quot;&lt;客户端生成的唯一ID&gt;&quot;,
+  &quot;data&quot;: {
+    // 参数（结构取决于 type）
+  }
+}</code></pre>
+</div>
+<div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>type</code></td><td>string</td><td>✅</td><td>请求类型，见下文各请求定义</td></tr><tr><td><code>id</code></td><td>string</td><td>推荐</td><td>客户端生成的唯一ID，响应中原样返回 （建议使用随机值）</td></tr><tr><td><code>data</code></td><td>object</td><td>否</td><td>请求参数，结构取决于 type</td></tr></tbody></table></div>
+<h3 id="push-事件格式">Push 事件格式</h3>
+<p>Push 事件仅发送给订阅了其 <code>type</code> 的客户端（见 <a href="#订阅">订阅</a>）。服务端主动推送的事件不含 <code>id</code> 字段：</p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;&lt;事件类型&gt;&quot;,
+  &quot;data&quot;: {
+    // 事件数据
+  }
+}</code></pre>
+</div>
+<div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>type</code></td><td>string</td><td>事件类型</td></tr><tr><td><code>data</code></td><td>object</td><td>事件数据</td></tr></tbody></table></div>
+<h3 id="响应格式">响应格式</h3>
+<h4 id="成功">成功</h4>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;response&quot;,
+  &quot;id&quot;: &quot;&lt;与请求相同的id&gt;&quot;,
+  &quot;data&quot;: {
+    &quot;success&quot;: true,
+    &quot;result&quot;: { }
+  }
+}</code></pre>
+</div>
+<div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>type</code></td><td>string</td><td>固定为 <code>&quot;response&quot;</code></td></tr><tr><td><code>id</code></td><td>string</td><td>与请求相同的 id</td></tr><tr><td><code>data.success</code></td><td>bool</td><td><code>true</code></td></tr><tr><td><code>data.result</code></td><td>any</td><td>操作返回值（查询时为数组或对象，设置时为 <code>{}</code>）</td></tr></tbody></table></div>
+<h4 id="错误">错误</h4>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;response&quot;,
+  &quot;id&quot;: &quot;req-1&quot;,
+  &quot;data&quot;: {
+    &quot;success&quot;: false,
+    &quot;error&quot;: &quot;错误描述&quot;
+  }
+}</code></pre>
+</div>
+<div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>type</code></td><td>string</td><td>固定为 <code>&quot;response&quot;</code></td></tr><tr><td><code>id</code></td><td>string</td><td>与请求相同的 id</td></tr><tr><td><code>data.success</code></td><td>bool</td><td><code>false</code></td></tr><tr><td><code>data.error</code></td><td>string</td><td>错误描述</td></tr></tbody></table></div>
+<hr>
+<h2 id="push-事件服务端--客户端">Push 事件（服务端 → 客户端）</h2>
+<h3 id="radar_update">radar_update</h3>
+<p>雷达目标位置更新。</p>
+<ul><li><strong>触发</strong>：<code>OnRadarTargetPositionUpdate</code></li><li><strong>频率</strong>：每个雷达目标位置变更时</li></ul>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;radar_update&quot;,
+  &quot;data&quot;: {
+    // RadarTarget 对象，见 [数据结构参考 — RadarTarget](#radartarget)
+  }
+}</code></pre>
+</div>
+<hr>
+<h3 id="flightplan_update">flightplan_update</h3>
+<p>飞行计划数据更新。</p>
+<ul><li><strong>触发</strong>：<code>OnFlightPlanFlightPlanDataUpdate</code></li><li><strong>频率</strong>：飞行计划数据变更时</li></ul>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;flightplan_update&quot;,
+  &quot;data&quot;: {
+    // FlightPlan 对象，见 [数据结构参考 — FlightPlan](#flightplan)
+  }
+}</code></pre>
+</div>
+<hr>
+<h3 id="flightplan_disconnect">flightplan_disconnect</h3>
+<p>飞行计划断开（飞机离开管制区）。</p>
+<ul><li><strong>触发</strong>：<code>OnFlightPlanDisconnect</code></li></ul>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>断开连接的飞行计划呼号</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;flightplan_disconnect&quot;,
+  &quot;data&quot;: {
+    &quot;callsign&quot;: &quot;CES1234&quot;
+  }
+}</code></pre>
+</div>
+<hr>
+<h3 id="controller_update">controller_update</h3>
+<p>管制员上线或位置/状态变更。</p>
+<ul><li><strong>触发</strong>：<code>OnControllerPositionUpdate</code></li></ul>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;controller_update&quot;,
+  &quot;data&quot;: {
+    // Controller 对象，见 [数据结构参考 — Controller](#controller)
+  }
+}</code></pre>
+</div>
+<hr>
+<h3 id="controller_disconnect">controller_disconnect</h3>
+<p>管制员断开连接。</p>
+<ul><li><strong>触发</strong>：<code>OnControllerDisconnect</code></li></ul>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>管制员呼号</td></tr><tr><td><code>data.position_id</code></td><td>string</td><td>席位 ID</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;controller_disconnect&quot;,
+  &quot;data&quot;: {
+    &quot;callsign&quot;: &quot;ZBAA_APP&quot;,
+    &quot;position_id&quot;: &quot;AAAP&quot;
+  }
+}</code></pre>
+</div>
+<p>若管制员已无效，<code>data</code> 为空对象 <code>{}</code>。</p>
+<hr>
+<h3 id="controller_assigned_data">controller_assigned_data</h3>
+<p>管制员修改了飞行计划的分配数据（如应答机、高度、速度等）。</p>
+<ul><li><strong>触发</strong>：<code>OnFlightPlanControllerAssignedDataUpdate</code></li></ul>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;controller_assigned_data&quot;,
+  &quot;data&quot;: {
+    /* FlightPlan 完整对象 */
+    &quot;data_type&quot;: 1
+  }
+}</code></pre>
+</div>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>data</code></td><td>object</td><td>FlightPlan 完整对象</td></tr><tr><td><code>data.data_type</code></td><td>int</td><td>变更的数据类型标识（由 EuroScope 定义）</td></tr></tbody></table></div>
+<hr>
+<h3 id="flight_strip_pushed">flight_strip_pushed</h3>
+<p>飞行进程单被推送给其他管制员。</p>
+<ul><li><strong>触发</strong>：<code>OnFlightPlanFlightStripPushed</code></li></ul>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>飞行计划呼号</td></tr><tr><td><code>data.sender</code></td><td>string</td><td>发送方管制员呼号</td></tr><tr><td><code>data.target</code></td><td>string</td><td>接收方管制员呼号</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;flight_strip_pushed&quot;,
+  &quot;data&quot;: {
+    &quot;callsign&quot;: &quot;CES1234&quot;,
+    &quot;sender&quot;: &quot;ZBAA_APP&quot;,
+    &quot;target&quot;: &quot;ZBAA_TWR&quot;
+  }
+}</code></pre>
+</div>
+<hr>
+<h3 id="chat_private">chat_private</h3>
+<p>私聊消息。</p>
+<ul><li><strong>触发</strong>：<code>OnCompilePrivateChat</code></li></ul>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>data.sender</code></td><td>string</td><td>发送者呼号</td></tr><tr><td><code>data.receiver</code></td><td>string</td><td>接收者呼号</td></tr><tr><td><code>data.message</code></td><td>string</td><td>消息内容</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;chat_private&quot;,
+  &quot;data&quot;: {
+    &quot;sender&quot;: &quot;PK123&quot;,
+    &quot;receiver&quot;: &quot;PK456&quot;,
+    &quot;message&quot;: &quot;Hello, contact me on 121.5&quot;
+  }
+}</code></pre>
+</div>
+<hr>
+<h3 id="chat_frequency">chat_frequency</h3>
+<p>频率上发送的文字聊天消息。</p>
+<ul><li><strong>触发</strong>：<code>OnCompileFrequencyChat</code></li></ul>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>data.sender</code></td><td>string</td><td>发送者呼号</td></tr><tr><td><code>data.frequency</code></td><td>number</td><td>发送频率 (MHz)</td></tr><tr><td><code>data.message</code></td><td>string</td><td>消息内容</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;chat_frequency&quot;,
+  &quot;data&quot;: {
+    &quot;sender&quot;: &quot;PK123&quot;,
+    &quot;frequency&quot;: 121.5,
+    &quot;message&quot;: &quot;CES1234, radar contact&quot;
+  }
+}</code></pre>
+</div>
+<hr>
+<h3 id="metar_received">metar_received</h3>
+<p>收到新的 METAR 气象报文。</p>
+<ul><li><strong>触发</strong>：<code>OnNewMetarReceived</code></li></ul>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>data.station</code></td><td>string</td><td>气象站四字码（如 ZBAA）</td></tr><tr><td><code>data.metar</code></td><td>string</td><td>完整 METAR 报文内容</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;metar_received&quot;,
+  &quot;data&quot;: {
+    &quot;station&quot;: &quot;ZBAA&quot;,
+    &quot;metar&quot;: &quot;ZBAA 010000Z 36006KT 320V040 CAVOK 25/M03 Q1017 NOSIG&quot;
+  }
+}</code></pre>
+</div>
+<hr>
+<h3 id="plane_info">plane_info</h3>
+<p>飞机机型/涂装信息更新。</p>
+<ul><li><strong>触发</strong>：<code>OnPlaneInformationUpdate</code></li></ul>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>飞机呼号</td></tr><tr><td><code>data.livery</code></td><td>string</td><td>涂装/航空公司代码</td></tr><tr><td><code>data.plane_type</code></td><td>string</td><td>机型代码</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;plane_info&quot;,
+  &quot;data&quot;: {
+    &quot;callsign&quot;: &quot;CES1234&quot;,
+    &quot;livery&quot;: &quot;CES&quot;,
+    &quot;plane_type&quot;: &quot;A320&quot;
+  }
+}</code></pre>
+</div>
+<hr>
+<h3 id="timer">timer</h3>
+<p>定时器事件，每秒触发一次。</p>
+<ul><li><strong>触发</strong>：<code>OnTimer</code></li><li><strong>频率</strong>：1 Hz</li></ul>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>data.counter</code></td><td>int</td><td>自插件启动以来的秒数计数</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;timer&quot;,
+  &quot;data&quot;: {
+    &quot;counter&quot;: 42
+  }
+}</code></pre>
+</div>
+<hr>
+<h3 id="airport_runway_activity_changed">airport_runway_activity_changed</h3>
+<p>跑道活动状态变更。</p>
+<ul><li><strong>触发</strong>：<code>OnAirportRunwayActivityChanged</code></li></ul>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;airport_runway_activity_changed&quot;,
+  &quot;data&quot;: {}
+}</code></pre>
+</div>
+<hr>
+<h2 id="订阅">订阅</h2>
+<p>Push 事件<strong>默认不推送</strong>。客户端必须订阅需要的事件类型，只有订阅的客户端才会收到对应事件；没有任何客户端订阅某事件时，该事件对应的 EuroScope 回调会被完全跳过（不做序列化与推送）。</p>
+<ul><li>订阅是<strong>按客户端</strong>的（每个 WebSocket 连接拥有各自的订阅集合）。</li><li>客户端断开连接时订阅自动清除。</li><li>未知的事件类型字符串会被接受但永远不会产生事件；全部 Push 事件类型见 <a href="#push-事件服务端--客户端">Push 事件（服务端 → 客户端）</a>。</li></ul>
+<h3 id="subscribe">subscribe</h3>
+<p>将给定的事件类型加入该客户端的订阅集合。可重复调用——再次调用并传入更多类型时追加订阅。</p>
+<p><strong>请求示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;subscribe&quot;, &quot;id&quot;: &quot;sub-1&quot;, &quot;data&quot;: { &quot;events&quot;: [&quot;radar_update&quot;, &quot;flightplan_update&quot;, &quot;timer&quot;] } }</code></pre>
+</div>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.events</code></td><td>string[]</td><td>✅</td><td>要订阅的事件类型</td></tr></tbody></table></div>
+<p><strong>响应示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;response&quot;,
+  &quot;id&quot;: &quot;sub-1&quot;,
+  &quot;data&quot;: {
+    &quot;success&quot;: true,
+    &quot;events&quot;: [&quot;flightplan_update&quot;, &quot;radar_update&quot;, &quot;timer&quot;]
+  }
+}</code></pre>
+</div>
+<div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>data.success</code></td><td>bool</td><td><code>true</code></td></tr><tr><td><code>data.events</code></td><td>string[]</td><td>操作完成后该客户端当前的完整订阅集合</td></tr></tbody></table></div>
+<h3 id="unsubscribe">unsubscribe</h3>
+<p>将给定的事件类型从该客户端的订阅集合中移除。若省略 <code>data.events</code> 或传入空数组，则<strong>清空全部订阅</strong>。</p>
+<p><strong>请求示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;unsubscribe&quot;, &quot;id&quot;: &quot;sub-2&quot;, &quot;data&quot;: { &quot;events&quot;: [&quot;timer&quot;] } }
+
+// 清空全部订阅
+{ &quot;type&quot;: &quot;unsubscribe&quot;, &quot;id&quot;: &quot;sub-3&quot; }</code></pre>
+</div>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.events</code></td><td>string[]</td><td>否</td><td>要取消订阅的事件类型；省略或传 <code>[]</code> 表示清空全部</td></tr></tbody></table></div>
+<p>响应格式与 <code>subscribe</code> 相同（<code>success</code> + 当前 <code>events</code>）。</p>
+<p><strong>错误示例</strong>（<code>data.events</code> 不是数组）：</p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;response&quot;,
+  &quot;id&quot;: &quot;sub-1&quot;,
+  &quot;data&quot;: {
+    &quot;success&quot;: false,
+    &quot;error&quot;: &quot;Invalid 'events' field; expected an array of strings&quot;
+  }
+}</code></pre>
+</div>
+<hr>
+<h2 id="请求客户端--服务端">请求（客户端 → 服务端）</h2>
+<h3 id="查询类">查询类</h3>
+<h4 id="get_flightplans">get_flightplans</h4>
+<p>获取飞行计划。不传 <code>callsign</code> 返回全部，传入则只返回匹配的那一条。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>否</td><td>飞行计划呼号；省略则返回全部</td></tr></tbody></table></div>
+<p><strong>请求示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">// 查询全部
+{ &quot;type&quot;: &quot;get_flightplans&quot;, &quot;id&quot;: &quot;1&quot; }
+
+// 查询单个
+{ &quot;type&quot;: &quot;get_flightplans&quot;, &quot;id&quot;: &quot;1&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot; } }</code></pre>
+</div>
+<p><strong>响应示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;response&quot;,
+  &quot;id&quot;: &quot;1&quot;,
+  &quot;data&quot;: {
+    &quot;success&quot;: true,
+    &quot;result&quot;: [
+      // FlightPlan[]
+    ]
+  }
+}</code></pre>
+</div>
+<hr>
+<h4 id="get_radar_targets">get_radar_targets</h4>
+<p>获取雷达目标。不传 <code>callsign</code> 返回全部。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>否</td><td>雷达目标呼号；省略则返回全部</td></tr></tbody></table></div>
+<p><strong>请求示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;get_radar_targets&quot;, &quot;id&quot;: &quot;2&quot; }
+{ &quot;type&quot;: &quot;get_radar_targets&quot;, &quot;id&quot;: &quot;2&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot; } }</code></pre>
+</div>
+<p><strong>响应示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;response&quot;,
+  &quot;id&quot;: &quot;2&quot;,
+  &quot;data&quot;: {
+    &quot;success&quot;: true,
+    &quot;result&quot;: [
+      // RadarTarget[]
+    ]
+  }
+}</code></pre>
+</div>
+<hr>
+<h4 id="get_controllers">get_controllers</h4>
+<p>获取所有在线管制员（自动包含自己）。</p>
+<ul><li><strong>无参数</strong></li></ul>
+<p><strong>请求示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;get_controllers&quot;, &quot;id&quot;: &quot;3&quot; }</code></pre>
+</div>
+<p><strong>响应示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;response&quot;,
+  &quot;id&quot;: &quot;3&quot;,
+  &quot;data&quot;: {
+    &quot;success&quot;: true,
+    &quot;result&quot;: [
+      // Controller[]
+    ]
+  }
+}</code></pre>
+</div>
+<hr>
+<h4 id="get_sector_elements">get_sector_elements</h4>
+<p>获取扇区文件元素。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>默认值</th><th>说明</th></tr></thead><tbody><tr><td><code>data.element_type</code></td><td>int</td><td>否</td><td><code>-1</code></td><td>元素类型过滤，<code>-1</code> 表示全部</td></tr></tbody></table></div>
+<p><strong>请求示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;get_sector_elements&quot;, &quot;id&quot;: &quot;4&quot;, &quot;data&quot;: { &quot;element_type&quot;: -1 } }</code></pre>
+</div>
+<p><strong>响应示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;response&quot;,
+  &quot;id&quot;: &quot;4&quot;,
+  &quot;data&quot;: {
+    &quot;success&quot;: true,
+    &quot;result&quot;: [
+      // SectorElement[]
+    ]
+  }
+}</code></pre>
+</div>
+<hr>
+<h4 id="get_voice_channels">get_voice_channels</h4>
+<p>获取所有语音频道。</p>
+<ul><li><strong>无参数</strong></li></ul>
+<p><strong>请求示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;get_voice_channels&quot;, &quot;id&quot;: &quot;5&quot; }</code></pre>
+</div>
+<p><strong>响应示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;response&quot;,
+  &quot;id&quot;: &quot;5&quot;,
+  &quot;data&quot;: {
+    &quot;success&quot;: true,
+    &quot;result&quot;: [
+      // VoiceChannel[]
+    ]
+  }
+}</code></pre>
+</div>
+<hr>
+<h4 id="get_transition_altitude">get_transition_altitude</h4>
+<p>获取当前扇区的过渡高度。</p>
+<ul><li><strong>无参数</strong></li></ul>
+<p><strong>请求示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;get_transition_altitude&quot;, &quot;id&quot;: &quot;6&quot; }</code></pre>
+</div>
+<p><strong>响应示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;response&quot;,
+  &quot;id&quot;: &quot;6&quot;,
+  &quot;data&quot;: {
+    &quot;success&quot;: true,
+    &quot;result&quot;: {
+      &quot;transition_altitude&quot;: 9800
+    }
+  }
+}</code></pre>
+</div>
+<div class="table-wrap"><table><thead><tr><th>响应字段</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>result.transition_altitude</code></td><td>int</td><td>过渡高度（英尺）</td></tr></tbody></table></div>
+<hr>
+<h4 id="get_connection_type">get_connection_type</h4>
+<p>获取当前连接类型。</p>
+<ul><li><strong>无参数</strong></li></ul>
+<p><strong>请求示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;get_connection_type&quot;, &quot;id&quot;: &quot;7&quot; }</code></pre>
+</div>
+<p><strong>响应示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;response&quot;,
+  &quot;id&quot;: &quot;7&quot;,
+  &quot;data&quot;: {
+    &quot;success&quot;: true,
+    &quot;result&quot;: {
+      &quot;connection_type&quot;: 1
+    }
+  }
+}</code></pre>
+</div>
+<div class="table-wrap"><table><thead><tr><th>响应字段</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>result.connection_type</code></td><td>int</td><td>连接类型代码</td></tr></tbody></table></div>
+<hr>
+<h4 id="get_full_snapshot">get_full_snapshot</h4>
+<p>获取完整当前状态快照，包含全部飞行计划、雷达目标和在线管制员。</p>
+<ul><li><strong>无参数</strong></li></ul>
+<p><strong>请求示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;get_full_snapshot&quot;, &quot;id&quot;: &quot;8&quot; }</code></pre>
+</div>
+<p><strong>响应示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;response&quot;,
+  &quot;id&quot;: &quot;8&quot;,
+  &quot;data&quot;: {
+    &quot;success&quot;: true,
+    &quot;result&quot;: {
+      &quot;flightplans&quot;: [
+        // FlightPlan[], 见数据结构参考
+      ],
+      &quot;radar_targets&quot;: [
+        // RadarTarget[], 见数据结构参考
+      ],
+      &quot;controllers&quot;: [
+        // Controller[], 见数据结构参考
+      ]
+    }
+  }
+}</code></pre>
+</div>
+<div class="table-wrap"><table><thead><tr><th>响应字段</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>result.flightplans</code></td><td>array</td><td>全部 FlightPlan 对象</td></tr><tr><td><code>result.radar_targets</code></td><td>array</td><td>全部 RadarTarget 对象</td></tr><tr><td><code>result.controllers</code></td><td>array</td><td>全部 Controller 对象（含自己）</td></tr></tbody></table></div>
+<hr>
+<h3 id="设置类--controllerassigneddata">设置类 — ControllerAssignedData</h3>
+<p>以下请求操作飞行计划的 <strong>ControllerAssignedData</strong> 数据（管制员分配的临时数据，覆盖飞行计划原始值）。</p>
+<p><strong>公共参数：</strong> 所有此类请求均需 <code>data.callsign</code> 和目标值（通过 <code>data.value</code> 传递，字符串或整数均可）。</p>
+<h4 id="set_squawk">set_squawk</h4>
+<p>设置应答机编码。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>应答机编码（4位数字字符串）</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_squawk&quot;, &quot;id&quot;: &quot;r1&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;5678&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_final_altitude">set_final_altitude</h4>
+<p>设置管制员分配的最终高度（覆盖飞行计划原始最终高度）。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>int</td><td>✅</td><td>最终高度（英尺）</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_final_altitude&quot;, &quot;id&quot;: &quot;r2&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: 35000 } }</code></pre>
+</div>
+<hr>
+<h4 id="set_cleared_altitude">set_cleared_altitude</h4>
+<p>设置许可高度。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>int</td><td>✅</td><td>许可高度（英尺）</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_cleared_altitude&quot;, &quot;id&quot;: &quot;r3&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: 5000 } }</code></pre>
+</div>
+<hr>
+<h4 id="set_scratchpad">set_scratchpad</h4>
+<p>设置便签文本。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>便签文本</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_scratchpad&quot;, &quot;id&quot;: &quot;r4&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;ANYTHING&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_speed">set_speed</h4>
+<p>设置分配速度（IAS，节）。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>int</td><td>✅</td><td>速度（节）</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_speed&quot;, &quot;id&quot;: &quot;r5&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: 250 } }</code></pre>
+</div>
+<hr>
+<h4 id="set_mach">set_mach</h4>
+<p>设置分配马赫数。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>int</td><td>✅</td><td>马赫数 × 100（如 78 表示 M.78）</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_mach&quot;, &quot;id&quot;: &quot;r6&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: 78 } }</code></pre>
+</div>
+<hr>
+<h4 id="set_rate">set_rate</h4>
+<p>设置升降率（英尺/分钟）。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>int</td><td>✅</td><td>升降率（ft/min）</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_rate&quot;, &quot;id&quot;: &quot;r7&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: 1500 } }</code></pre>
+</div>
+<hr>
+<h4 id="set_heading">set_heading</h4>
+<p>设置分配航向（度）。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>int</td><td>✅</td><td>航向（0-360）</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_heading&quot;, &quot;id&quot;: &quot;r8&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: 180 } }</code></pre>
+</div>
+<hr>
+<h4 id="set_direct_to">set_direct_to</h4>
+<p>设置直飞导航点。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>导航点名称</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_direct_to&quot;, &quot;id&quot;: &quot;r9&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;LADIX&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_communication_type">set_communication_type</h4>
+<p>设置通信类型。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>单字符通信类型码（<code>V</code> = 语音, <code>T</code> = 文字，<code>R</code>=语音仅接收）</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_communication_type&quot;, &quot;id&quot;: &quot;r10&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;V&quot; } }</code></pre>
+</div>
+<hr>
+<h3 id="设置类--flightplandata">设置类 — FlightPlanData</h3>
+<p>以下请求修改飞行计划的 <strong>FlightPlanData</strong>（飞行计划原始数据字段）。</p>
+<p><strong>公共参数：</strong> 所有此类请求均需 <code>data.callsign</code> 和目标值（通过 <code>data.value</code> 传递）。</p>
+<h4 id="set_plan_type">set_plan_type</h4>
+<p>设置飞行计划类型。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>计划类型（如 <code>&quot;I&quot;</code>, <code>&quot;V&quot;</code>）</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_plan_type&quot;, &quot;id&quot;: &quot;r11&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;I&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_aircraft_info">set_aircraft_info</h4>
+<p>设置机型信息（ICAO 机型字符串）。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>ICAO 机型信息字符串</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_aircraft_info&quot;, &quot;id&quot;: &quot;r12&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;A320/M-SDE2E3FGHIRWXY/LB1&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_origin">set_origin</h4>
+<p>设置起飞机场。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>ICAO 四字码</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_origin&quot;, &quot;id&quot;: &quot;r13&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;ZBAA&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_destination">set_destination</h4>
+<p>设置目的机场。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>ICAO 四字码</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_destination&quot;, &quot;id&quot;: &quot;r14&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;ZSPD&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_alternate">set_alternate</h4>
+<p>设置备降机场。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>ICAO 四字码</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_alternate&quot;, &quot;id&quot;: &quot;r15&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;ZSNJ&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_remarks">set_remarks</h4>
+<p>设置备注（RMK/）。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>备注文本</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_remarks&quot;, &quot;id&quot;: &quot;r16&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;RMK/TCAS EQUIPPED&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_route">set_route</h4>
+<p>设置航路字符串。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>完整航路字符串</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_route&quot;, &quot;id&quot;: &quot;r17&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;LADIX W40 YQG W34 ANRAT&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_true_airspeed">set_true_airspeed</h4>
+<p>设置真空速（节）。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>int</td><td>✅</td><td>真空速（节）</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_true_airspeed&quot;, &quot;id&quot;: &quot;r18&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: 460 } }</code></pre>
+</div>
+<hr>
+<h4 id="set_departure_time">set_departure_time</h4>
+<p>设置预计起飞时间（EOBT）。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>时间字符串（格式取决于 EuroScope）</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_departure_time&quot;, &quot;id&quot;: &quot;r19&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;1200&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_actual_departure_time">set_actual_departure_time</h4>
+<p>设置实际起飞时间（ATD）。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>时间字符串</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_actual_departure_time&quot;, &quot;id&quot;: &quot;r20&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;1215&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_enroute_hours">set_enroute_hours</h4>
+<p>设置航路飞行小时。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>小时数字符串</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_enroute_hours&quot;, &quot;id&quot;: &quot;r21&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;1&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_enroute_minutes">set_enroute_minutes</h4>
+<p>设置航路飞行分钟。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>分钟数字符串</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_enroute_minutes&quot;, &quot;id&quot;: &quot;r22&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;30&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_fuel_hours">set_fuel_hours</h4>
+<p>设置燃油小时。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>小时数字符串</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_fuel_hours&quot;, &quot;id&quot;: &quot;r23&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;2&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_fuel_minutes">set_fuel_minutes</h4>
+<p>设置燃油分钟。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.value</code></td><td>string</td><td>✅</td><td>分钟数字符串</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_fuel_minutes&quot;, &quot;id&quot;: &quot;r24&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;value&quot;: &quot;0&quot; } }</code></pre>
+</div>
+<hr>
+<h3 id="操作类">操作类</h3>
+<h4 id="amend_flight_plan">amend_flight_plan</h4>
+<p>提交飞行计划修改（使 FlightPlanData 的修改生效）。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;amend_flight_plan&quot;, &quot;id&quot;: &quot;a1&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="start_tracking">start_tracking</h4>
+<p>开始追踪飞行计划。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;start_tracking&quot;, &quot;id&quot;: &quot;a2&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="end_tracking">end_tracking</h4>
+<p>结束追踪飞行计划。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;end_tracking&quot;, &quot;id&quot;: &quot;a3&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="accept_handoff">accept_handoff</h4>
+<p>接受移交。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;accept_handoff&quot;, &quot;id&quot;: &quot;a4&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="refuse_handoff">refuse_handoff</h4>
+<p>拒绝移交。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;refuse_handoff&quot;, &quot;id&quot;: &quot;a5&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="initiate_handoff">initiate_handoff</h4>
+<p>发起移交给指定管制员。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.target</code></td><td>string</td><td>✅</td><td>目标管制员呼号</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;initiate_handoff&quot;, &quot;id&quot;: &quot;a6&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;target&quot;: &quot;ZBAA_TWR&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="push_flight_strip">push_flight_strip</h4>
+<p>推送飞行进程单给指定管制员。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.target</code></td><td>string</td><td>✅</td><td>目标管制员呼号</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;push_flight_strip&quot;, &quot;id&quot;: &quot;a7&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;target&quot;: &quot;ZBAA_TWR&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_estimation">set_estimation</h4>
+<p>设置预计过点时间。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.point</code></td><td>string</td><td>✅</td><td>导航点名称</td></tr><tr><td><code>data.time</code></td><td>string</td><td>✅</td><td>预计时间字符串</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_estimation&quot;, &quot;id&quot;: &quot;a8&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;point&quot;: &quot;LADIX&quot;, &quot;time&quot;: &quot;1230&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="clear_estimation">clear_estimation</h4>
+<p>清除预计时间。不传 <code>point</code> 则清除全部预计时间；传入 <code>point</code> 则仅清除指定导航点的预计时间。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.point</code></td><td>string</td><td>否</td><td>导航点名称；省略则清除全部</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">// 清除全部
+{ &quot;type&quot;: &quot;clear_estimation&quot;, &quot;id&quot;: &quot;a9&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot; } }
+
+// 清除指定点
+{ &quot;type&quot;: &quot;clear_estimation&quot;, &quot;id&quot;: &quot;a9&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;point&quot;: &quot;LADIX&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_flight_strip_annotation">set_flight_strip_annotation</h4>
+<p>设置飞行进程单注释（第 0-8 行）。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.index</code></td><td>int</td><td>✅</td><td>注释行索引（0-8）</td></tr><tr><td><code>data.annotation</code></td><td>string</td><td>✅</td><td>注释文本</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_flight_strip_annotation&quot;, &quot;id&quot;: &quot;a10&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;index&quot;: 0, &quot;annotation&quot;: &quot;PEL&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="correlate">correlate</h4>
+<p>将飞行计划与雷达目标关联。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.fp_callsign</code></td><td>string</td><td>✅</td><td>飞行计划呼号</td></tr><tr><td><code>data.rt_callsign</code></td><td>string</td><td>✅</td><td>雷达目标呼号</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;correlate&quot;, &quot;id&quot;: &quot;a11&quot;, &quot;data&quot;: { &quot;fp_callsign&quot;: &quot;CES1234&quot;, &quot;rt_callsign&quot;: &quot;CES1234&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="uncorrelate">uncorrelate</h4>
+<p>解除飞行计划与雷达目标的关联。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>默认值</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>—</td><td>飞行计划或雷达目标呼号</td></tr><tr><td><code>data.target_type</code></td><td>string</td><td>否</td><td><code>&quot;fp&quot;</code></td><td>目标类型：<code>&quot;fp&quot;</code> 或 <code>&quot;rt&quot;</code> / <code>&quot;radar_target&quot;</code></td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">// 从飞行计划侧解除关联
+{ &quot;type&quot;: &quot;uncorrelate&quot;, &quot;id&quot;: &quot;a12&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;target_type&quot;: &quot;fp&quot; } }
+
+// 从雷达目标侧解除关联
+{ &quot;type&quot;: &quot;uncorrelate&quot;, &quot;id&quot;: &quot;a12&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;target_type&quot;: &quot;rt&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="set_asel">set_asel</h4>
+<p>设置当前选中飞机（ASEL）。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>默认值</th><th>说明</th></tr></thead><tbody><tr><td><code>data.callsign</code></td><td>string</td><td>✅</td><td>—</td><td>飞行计划或雷达目标呼号</td></tr><tr><td><code>data.asel_type</code></td><td>string</td><td>否</td><td><code>&quot;fp&quot;</code></td><td>目标类型：<code>&quot;fp&quot;</code> 或 <code>&quot;rt&quot;</code> / <code>&quot;radar_target&quot;</code></td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;set_asel&quot;, &quot;id&quot;: &quot;a13&quot;, &quot;data&quot;: { &quot;callsign&quot;: &quot;CES1234&quot;, &quot;asel_type&quot;: &quot;fp&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="display_message">display_message</h4>
+<p>在 EuroScope 界面显示消息。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>默认值</th><th>说明</th></tr></thead><tbody><tr><td><code>data.handler</code></td><td>string</td><td>否</td><td><code>&quot;DataBridge&quot;</code></td><td>消息处理器名称</td></tr><tr><td><code>data.sender</code></td><td>string</td><td>否</td><td>—</td><td>发送者名称</td></tr><tr><td><code>data.message</code></td><td>string</td><td>否</td><td>—</td><td>消息内容</td></tr><tr><td><code>data.show</code></td><td>bool</td><td>否</td><td><code>true</code></td><td>是否显示 handler 名称</td></tr><tr><td><code>data.unread</code></td><td>bool</td><td>否</td><td><code>true</code></td><td>是否标记为未读</td></tr><tr><td><code>data.busy</code></td><td>bool</td><td>否</td><td><code>true</code></td><td>繁忙时是否仍然显示</td></tr><tr><td><code>data.flash</code></td><td>bool</td><td>否</td><td><code>true</code></td><td>是否闪烁</td></tr><tr><td><code>data.confirm</code></td><td>bool</td><td>否</td><td><code>false</code></td><td>是否需要用户确认</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{
+  &quot;type&quot;: &quot;display_message&quot;,
+  &quot;id&quot;: &quot;a14&quot;,
+  &quot;data&quot;: {
+    &quot;sender&quot;: &quot;外部系统&quot;,
+    &quot;message&quot;: &quot;数据同步完成&quot;,
+    &quot;flash&quot;: true,
+    &quot;confirm&quot;: false
+  }
+}</code></pre>
+</div>
+<hr>
+<h4 id="send_command">send_command</h4>
+<p>发送原始指令到 EuroScope。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.command</code></td><td>string</td><td>✅</td><td>EuroScope 命令字符串</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;send_command&quot;, &quot;id&quot;: &quot;a15&quot;, &quot;data&quot;: { &quot;command&quot;: &quot;.msg PK123 Hello&quot; } }</code></pre>
+</div>
+<hr>
+<h3 id="语音频道切换">语音频道切换</h3>
+<p>所有切换操作共享相同的参数结构。<code>channel</code> 参数指定目标频道名称，若省略则使用第一个可用频道。</p>
+<h4 id="toggle_primary">toggle_primary</h4>
+<p>切换主频道。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.channel</code></td><td>string</td><td>否</td><td>频道名称；省略则使用第一个可用频道</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;toggle_primary&quot;, &quot;id&quot;: &quot;v1&quot;, &quot;data&quot;: { &quot;channel&quot;: &quot;ZBAA_APP&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="toggle_atis">toggle_atis</h4>
+<p>切换 ATIS 频道。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.channel</code></td><td>string</td><td>否</td><td>频道名称</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;toggle_atis&quot;, &quot;id&quot;: &quot;v2&quot;, &quot;data&quot;: { &quot;channel&quot;: &quot;ZBAA_ATIS&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="toggle_text_receive">toggle_text_receive</h4>
+<p>切换文字接收。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.channel</code></td><td>string</td><td>否</td><td>频道名称</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;toggle_text_receive&quot;, &quot;id&quot;: &quot;v3&quot;, &quot;data&quot;: { &quot;channel&quot;: &quot;ZBAA_APP&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="toggle_text_transmit">toggle_text_transmit</h4>
+<p>切换文字发送。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.channel</code></td><td>string</td><td>否</td><td>频道名称</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;toggle_text_transmit&quot;, &quot;id&quot;: &quot;v4&quot;, &quot;data&quot;: { &quot;channel&quot;: &quot;ZBAA_APP&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="toggle_voice_receive">toggle_voice_receive</h4>
+<p>切换语音接收。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.channel</code></td><td>string</td><td>否</td><td>频道名称</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;toggle_voice_receive&quot;, &quot;id&quot;: &quot;v5&quot;, &quot;data&quot;: { &quot;channel&quot;: &quot;ZBAA_APP&quot; } }</code></pre>
+</div>
+<hr>
+<h4 id="toggle_voice_transmit">toggle_voice_transmit</h4>
+<p>切换语音发送。</p>
+<div class="table-wrap"><table><thead><tr><th>参数</th><th>类型</th><th>必需</th><th>说明</th></tr></thead><tbody><tr><td><code>data.channel</code></td><td>string</td><td>否</td><td>频道名称</td></tr></tbody></table></div>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;toggle_voice_transmit&quot;, &quot;id&quot;: &quot;v6&quot;, &quot;data&quot;: { &quot;channel&quot;: &quot;ZBAA_APP&quot; } }</code></pre>
+</div>
+<hr>
+<h2 id="数据结构参考">数据结构参考</h2>
+<h3 id="flightplan">FlightPlan</h3>
+<p>飞行计划完整对象。出现在 <code>flightplan_update</code>、<code>controller_assigned_data</code>、<code>full_snapshot</code>、<code>get_flightplans</code> 中。</p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-jsonc">{
+  &quot;valid&quot;: true,                        // bool   — 对象是否有效
+  &quot;callsign&quot;: &quot;CES1234&quot;,                // string — 呼号
+  &quot;pilot_name&quot;: &quot;Leo Chen&quot;,             // string — 飞行员姓名
+  &quot;state&quot;: 2,                           // int    — 状态码
+  &quot;fp_state&quot;: 0,                        // int    — 飞行计划状态
+  &quot;simulated&quot;: false,                   // bool   — 是否为模拟机
+
+  // --- 追踪 ---
+  &quot;tracking_controller_callsign&quot;: &quot;ZBAA_APP&quot;,  // string — 追踪管制员呼号
+  &quot;tracking_controller_id&quot;: &quot;AAAA&quot;,           // string — 追踪管制员 ID
+  &quot;tracking_controller_is_me&quot;: true,           // bool   — 是否为自己在追踪
+
+  // --- 移交 ---
+  &quot;handoff_target_callsign&quot;: &quot;ZBAA_TWR&quot;,       // string — 移交目标管制员呼号
+  &quot;handoff_target_id&quot;: &quot;AAAT&quot;,                // string — 移交目标管制员 ID
+
+  // --- 航路 ---
+  &quot;distance_to_destination&quot;: 450.3,     // double — 到目的地距离 (NM)
+  &quot;distance_from_origin&quot;: 23.1,        // double — 离起飞机场距离 (NM)
+  &quot;next_copx&quot;: &quot;LADIX&quot;,                // string — 下一个 COPX 点
+  &quot;next_fir_copx&quot;: &quot;&quot;,                 // string — 下一个 FIR 边界点
+  &quot;sector_entry_minutes&quot;: 5,           // int    — 进入扇区分钟数
+  &quot;sector_exit_minutes&quot;: 12,           // int    — 离开扇区分钟数
+
+  // --- 标志 ---
+  &quot;ram_flag&quot;: true,                    // bool   — RAM 标志
+  &quot;clam_flag&quot;: false,                  // bool   — CLAM 标志
+  &quot;ground_state&quot;: &quot;AIR&quot;,               // string — 地面状态 (AIR/GND/...)
+  &quot;clearence_flag&quot;: 1,                 // int    — 放行许可标志
+  &quot;text_communication&quot;: false,         // bool   — 是否文字通信
+
+  // --- 高度 ---
+  &quot;final_altitude&quot;: 35000,              // int    — 最终高度 (ft)
+  &quot;cleared_altitude&quot;: 5000,            // int    — 许可高度 (ft)
+
+  // --- 协调（入口）---
+  &quot;entry_coordination_point_name&quot;: &quot;LADIX&quot;,     // string — 入口协调点
+  &quot;entry_coordination_point_state&quot;: 1,          // int    — 入口协调点状态
+  &quot;entry_coordination_altitude_state&quot;: 1,       // int    — 入口协调高度状态
+  &quot;entry_coordination_altitude&quot;: 35000,          // int    — 入口协调高度
+
+  // --- 协调（出口）---
+  &quot;exit_coordination_point_name&quot;: &quot;ANRAT&quot;,      // string — 出口协调点
+  &quot;exit_coordination_name_state&quot;: 1,            // int    — 出口协调点名状态
+  &quot;exit_coordination_altitude_state&quot;: 1,        // int    — 出口协调高度状态
+  &quot;exit_coordination_altitude&quot;: 35000,           // int    — 出口协调高度
+
+  // --- 下一管制员 ---
+  &quot;coordinated_next_controller&quot;: &quot;ZBAA_TWR&quot;,    // string — 协调的下一管制员
+  &quot;coordinated_next_controller_state&quot;: 1,       // int    — 协调状态
+
+  // --- 子对象 ---
+  &quot;flight_plan_data&quot;:             { /* FlightPlanData */ },
+  &quot;controller_assigned_data&quot;:     { /* ControllerAssignedData */ },
+  &quot;extracted_route&quot;:              { /* ExtractedRoute */ },
+  &quot;position_predictions&quot;:         { /* PositionPredictions */ },
+  &quot;track_position&quot;:               { /* RadarTargetPositionData */ }
+}</code></pre>
+</div>
+<hr>
+<h3 id="flightplandata">FlightPlanData</h3>
+<p>飞行计划原始数据。</p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-jsonc">{
+  &quot;is_received&quot;: true,                // bool   — 是否已接收
+  &quot;is_amended&quot;: false,                // bool   — 是否已修改
+  &quot;plan_type&quot;: &quot;I&quot;,                   // string — 计划类型 (I/V)
+  &quot;aircraft_info&quot;: &quot;A320/M-SDE2E3FGHIRWXY/LB1&quot;,  // string — ICAO 机型字符串
+  &quot;aircraft_wtc&quot;: &quot;M&quot;,                // char   — 尾流等级 (L/M/H/J)
+  &quot;aircraft_type&quot;: &quot;J&quot;,               // char   — 飞机类型
+  &quot;engine_number&quot;: 2,                 // int    — 发动机数量
+  &quot;engine_type&quot;: &quot;J&quot;,                 // char   — 发动机类型
+  &quot;capabilities&quot;: &quot;S&quot;,                // char   — 设备能力代码
+  &quot;is_rvsm&quot;: true,                    // bool   — 是否 RVSM 能力
+  &quot;manufacturer_type&quot;: &quot;A320&quot;,        // string — 制造商型号
+  &quot;aircraft_fp_type&quot;: &quot;A320&quot;,         // string — 飞行计划中的机型
+  &quot;true_airspeed&quot;: 460,               // int    — 真空速 (kt)
+  &quot;origin&quot;: &quot;ZBAA&quot;,                   // string — 起飞机场 ICAO
+  &quot;destination&quot;: &quot;ZSPD&quot;,              // string — 目的机场 ICAO
+  &quot;alternate&quot;: &quot;ZSNJ&quot;,                // string — 备降机场 ICAO
+  &quot;final_altitude&quot;: 35000,             // int    — 最终高度 (ft)
+  &quot;remarks&quot;: &quot;&quot;,                      // string — 备注 (RMK/)
+  &quot;communication_type&quot;: &quot;V&quot;,          // char   — 通信类型
+  &quot;route&quot;: &quot;LADIX W40 YQG W34 ANRAT&quot;, // string — 航路
+  &quot;sid_name&quot;: &quot;LADIX11D&quot;,             // string — SID 名称
+  &quot;star_name&quot;: &quot;&quot;,                    // string — STAR 名称
+  &quot;departure_rwy&quot;: &quot;36R&quot;,             // string — 起飞跑道
+  &quot;arrival_rwy&quot;: &quot;&quot;,                  // string — 到达跑道
+  &quot;estimated_departure_time&quot;: &quot;1200&quot;, // string — EOBT
+  &quot;actual_departure_time&quot;: &quot;&quot;,        // string — ATD
+  &quot;enroute_hours&quot;: &quot;1&quot;,               // string — 航路小时
+  &quot;enroute_minutes&quot;: &quot;30&quot;,            // string — 航路分钟
+  &quot;fuel_hours&quot;: &quot;2&quot;,                  // string — 燃油小时
+  &quot;fuel_minutes&quot;: &quot;0&quot;                 // string — 燃油分钟
+}</code></pre>
+</div>
+<hr>
+<h3 id="controllerassigneddata">ControllerAssignedData</h3>
+<p>管制员分配的临时数据。</p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-jsonc">{
+  &quot;squawk&quot;: &quot;1234&quot;,                   // string — 应答机编码
+  &quot;final_altitude&quot;: 9800,             // int    — 管制员分配的最终高度
+  &quot;cleared_altitude&quot;: 5000,           // int    — 许可高度
+  &quot;communication_type&quot;: &quot;V&quot;,          // char   — 通信类型
+  &quot;scratchpad&quot;: &quot;&quot;,                   // string — 便签
+  &quot;assigned_speed&quot;: 250,              // int    — 分配速度 (kt)
+  &quot;assigned_mach&quot;: 0,                 // int    — 分配马赫数 ×100
+  &quot;assigned_rate&quot;: 0,                 // int    — 分配升降率 (ft/min)
+  &quot;assigned_heading&quot;: 180,            // int    — 分配航向 (°)
+  &quot;direct_to&quot;: &quot;&quot;,                    // string — 直飞点
+  &quot;flight_strip_annotations&quot;: [       // string[] — 进程单注释 (索引 0-8)
+    &quot;&quot;, &quot;&quot;, &quot;&quot;, &quot;&quot;, &quot;&quot;, &quot;&quot;, &quot;&quot;, &quot;&quot;, &quot;&quot;
+  ]
+}</code></pre>
+</div>
+<hr>
+<h3 id="extractedroute">ExtractedRoute</h3>
+<p>提取的航路数据。</p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-jsonc">{
+  &quot;points_number&quot;: 4,                 // int  — 航路点数量
+  &quot;calculated_index&quot;: 0,              // int  — 计算索引
+  &quot;assigned_index&quot;: 0,                // int  — 分配索引
+  &quot;points&quot;: [
+    {
+      &quot;index&quot;: 0,                     // int    — 序号
+      &quot;name&quot;: &quot;LADIX&quot;,                // string — 导航点名称
+      &quot;latitude&quot;: 40.123,             // double — 纬度
+      &quot;longitude&quot;: 116.456,           // double — 经度
+      &quot;airway_name&quot;: &quot;W40&quot;,           // string — 航路名称
+      &quot;airway_classification&quot;: 1,     // int    — 航路分类
+      &quot;distance_in_minutes&quot;: 0,       // int    — 距离（分钟）
+      &quot;calculated_profile_altitude&quot;: 35000  // int — 计算剖面高度
+    }
+  ]
+}</code></pre>
+</div>
+<hr>
+<h3 id="positionpredictions">PositionPredictions</h3>
+<p>位置预测数据。</p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-jsonc">{
+  &quot;points_number&quot;: 3,                 // int  — 预测点数量
+  &quot;points&quot;: [
+    {
+      &quot;index&quot;: 0,                     // int    — 序号
+      &quot;latitude&quot;: 39.5,               // double — 纬度
+      &quot;longitude&quot;: 117.1,             // double — 经度
+      &quot;altitude&quot;: 35000,               // int    — 高度 (ft)
+      &quot;controller_id&quot;: &quot;ZBAA_APP&quot;     // string — 管制员 ID
+    }
+  ]
+}</code></pre>
+</div>
+<hr>
+<h3 id="radartargetpositiondata">RadarTargetPositionData</h3>
+<p>雷达目标位置数据（单个位置快照）。</p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-jsonc">{
+  &quot;valid&quot;: true,                      // bool   — 是否有效
+  &quot;latitude&quot;: 39.923,                 // double — 纬度
+  &quot;longitude&quot;: 116.587,               // double — 经度
+  &quot;flight_level&quot;: 350,                // int    — 高度 (FL)
+  &quot;squawk&quot;: &quot;1234&quot;,                   // string — 应答机
+  &quot;reported_gs&quot;: 460,                 // int    — 地速 (kt)
+  &quot;reported_heading&quot;: 180,            // int    — 磁航向 (°)
+  &quot;reported_heading_true_north&quot;: 176, // int    — 真航向 (°)
+  &quot;reported_pitch&quot;: 0,                // int    — 俯仰角
+  &quot;reported_bank&quot;: 0,                 // int    — 坡度
+  &quot;radar_flags&quot;: 0,                   // int    — 雷达标志位
+  &quot;received_time&quot;: 1234567890,        // int    — 接收时间戳
+  &quot;transponder_c&quot;: true,              // bool   — Mode C 应答
+  &quot;transponder_i&quot;: false              // bool   — Mode I 应答
+}</code></pre>
+</div>
+<hr>
+<h3 id="radartarget">RadarTarget</h3>
+<p>雷达目标完整对象。出现在 <code>radar_update</code>、<code>full_snapshot</code>、<code>get_radar_targets</code> 中。</p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-jsonc">{
+  &quot;valid&quot;: true,                      // bool   — 是否有效
+  &quot;callsign&quot;: &quot;CES1234&quot;,              // string — 呼号
+  &quot;system_id&quot;: &quot;RADAR1&quot;,              // string — 雷达站 ID
+  &quot;vertical_speed&quot;: 1500,             // int    — 垂直速度 (ft/min)
+  &quot;track_heading&quot;: 178,               // int    — 航迹 (°)
+  &quot;ground_speed&quot;: 460,                // int    — 地速 (kt)
+  &quot;correlated_callsign&quot;: &quot;CES1234&quot;,   // string — 关联的飞行计划呼号（null 表示无关联）
+  &quot;position&quot;: {
+    // RadarTargetPositionData — 当前位置
+  },
+  &quot;position_history&quot;: [
+    // RadarTargetPositionData[] — 历史位置（按时间倒序）
+  ]
+}</code></pre>
+</div>
+<hr>
+<h3 id="controller">Controller</h3>
+<p>管制员对象。出现在 <code>controller_update</code>、<code>full_snapshot</code>、<code>get_controllers</code> 中。</p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-jsonc">{
+  &quot;valid&quot;: true,                      // bool   — 是否有效
+  &quot;callsign&quot;: &quot;ZBAA_APP&quot;,                // string — 管制员呼号
+  &quot;position_id&quot;: &quot;AAAA&quot;,          // string — 席位 ID
+  &quot;identified&quot;: true,                 // bool   — 是否身份已验证
+  &quot;primary_frequency&quot;: 121.100,       // double — 主频频率 (MHz)
+  &quot;full_name&quot;: &quot;Leo Chen&quot;,            // string — 全名
+  &quot;rating&quot;: 5,                        // int    — 管制员等级
+  &quot;facility&quot;: 1,                      // int    — 设施类型
+  &quot;sector_file&quot;: &quot;ZBAA.sct&quot;,          // string — 扇区文件名
+  &quot;is_controller&quot;: true,              // bool   — 是否为管制员
+  &quot;position&quot;: {
+    &quot;latitude&quot;: 40.08,                // double — 纬度
+    &quot;longitude&quot;: 116.58               // double — 经度
+  },
+  &quot;range&quot;: 200,                       // int    — 可视范围 (NM)
+  &quot;is_breaking&quot;: false,               // bool   — 是否正在断开
+  &quot;ongoing_able&quot;: true                // bool   — 是否可接续
+}</code></pre>
+</div>
+<hr>
+<h3 id="sectorelement">SectorElement</h3>
+<p>扇区元素对象。出现在 <code>get_sector_elements</code> 中。</p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-jsonc">{
+  &quot;valid&quot;: true,                      // bool   — 是否有效
+  &quot;name&quot;: &quot;ZBAA_APP&quot;,                 // string — 元素名称
+  &quot;element_type&quot;: 1,                  // int    — 元素类型
+  &quot;positions&quot;: [
+    { &quot;latitude&quot;: 39.5, &quot;longitude&quot;: 116.0 },   // 多边形顶点
+    { &quot;latitude&quot;: 40.5, &quot;longitude&quot;: 117.0 }
+  ],
+  &quot;components&quot;: [&quot;ZBAA_APP&quot;],         // string[] — 组件名称
+  &quot;frequency&quot;: 121.1,                 // double — 频率 (MHz)
+  &quot;runways&quot;: [
+    { &quot;name&quot;: &quot;36R&quot;, &quot;heading&quot;: 359 },  // 跑道
+    { &quot;name&quot;: &quot;18L&quot;, &quot;heading&quot;: 179 }
+  ],
+  &quot;airport_name&quot;: &quot;ZBAA&quot;,             // string — 机场名称
+  &quot;active_arrival&quot;: true,             // bool   — 进场激活
+  &quot;active_departure&quot;: false           // bool   — 离场激活
+}</code></pre>
+</div>
+<hr>
+<h3 id="voicechannel">VoiceChannel</h3>
+<p>语音频道对象。出现在 <code>get_voice_channels</code> 中。</p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-jsonc">{
+  &quot;valid&quot;: true,                      // bool   — 是否有效
+  &quot;name&quot;: &quot;ZBAA_APP&quot;,                 // string — 频道名称
+  &quot;frequency&quot;: 121.100,               // double — 频率 (MHz)
+  &quot;voice_server&quot;: &quot;voice.example.com&quot;,// string — 语音服务器地址
+  &quot;voice_channel&quot;: &quot;ZBAA_APP&quot;,        // string — 语音频道 ID
+  &quot;is_primary&quot;: true,                 // bool   — 是否主频道
+  &quot;is_atis&quot;: false,                   // bool   — 是否 ATIS
+  &quot;is_text_receive_on&quot;: true,         // bool   — 文字接收是否开启
+  &quot;is_text_transmit_on&quot;: false,       // bool   — 文字发送是否开启
+  &quot;is_voice_receive_on&quot;: true,        // bool   — 语音接收是否开启
+  &quot;is_voice_transmit_on&quot;: true,       // bool   — 语音发送是否开启
+  &quot;is_voice_connected&quot;: true          // bool   — 语音是否已连接
+}</code></pre>
+</div>
+<hr>
+<h2 id="错误处理">错误处理</h2>
+<p>所有错误通过 <code>response</code> 消息返回，<code>data.success</code> 为 <code>false</code>。</p>
+<h3 id="常见错误消息">常见错误消息</h3>
+<div class="table-wrap"><table><thead><tr><th>错误消息</th><th>触发条件</th></tr></thead><tbody><tr><td><code>Missing 'type' field</code></td><td>请求缺少 <code>type</code> 字段</td></tr><tr><td><code>Missing 'callsign' for setter operation</code></td><td>设置操作缺少 <code>data.callsign</code></td></tr><tr><td><code>Flight plan not found: &lt;callsign&gt;</code></td><td>指定的飞行计划不存在</td></tr><tr><td><code>Radar target not found: &lt;callsign&gt;</code></td><td>指定的雷达目标不存在</td></tr><tr><td><code>Voice channel not found: &lt;name&gt;</code></td><td>指定的语音频道未找到</td></tr><tr><td><code>Missing 'target' controller</code></td><td><code>initiate_handoff</code> 或 <code>push_flight_strip</code> 缺少 <code>target</code></td></tr><tr><td><code>Missing 'point' or 'time'</code></td><td><code>set_estimation</code> 缺少 <code>point</code> 或 <code>time</code></td></tr><tr><td><code>Missing 'fp_callsign' or 'rt_callsign'</code></td><td><code>correlate</code> 缺少参数</td></tr><tr><td><code>Missing or invalid 'index' (0-8 required)</code></td><td><code>set_flight_strip_annotation</code> 的 <code>index</code> 无效</td></tr><tr><td><code>Unknown message type: &lt;type&gt;</code></td><td>不支持的请求类型</td></tr><tr><td><code>Invalid JSON</code></td><td>请求不是合法的 JSON（立即返回错误，不进入处理队列）</td></tr></tbody></table></div>
+<hr>
+<h2 id="配置常量">配置常量</h2>
+<div class="table-wrap"><table><thead><tr><th>常量</th><th>值</th><th>说明</th></tr></thead><tbody><tr><td>WebSocket 端口</td><td><code>48521</code></td><td>仅监听 <code>127.0.0.1</code></td></tr><tr><td>广播间隔</td><td><code>10 ms</code></td><td>出队队列批量广播间隔</td></tr><tr><td>定时器间隔</td><td><code>1 s</code></td><td><code>timer</code> 事件频率</td></tr></tbody></table></div>
+  </article>
+</main>
+<footer class="foot">
+  <div class="foot-inner">
+    <p>EuroScope Data Bridge · MIT License © 2026 Leo Chen</p>
+    <p class="foot-links">
+      <a href="https://github.com/LeoChen98/EuroscopeDataBridge" target="_blank" rel="noopener">GitHub</a>
+      <span>·</span>
+      <a href="../zh/wiki.html">中文</a><span>·</span><a href="../en/wiki.html">English</a>
+    </p>
+  </div>
+</footer>
+<script src="../assets/script.js"></script>
+</body>
+</html>

@@ -486,6 +486,19 @@ table code { white-space: normal; }
 .step p strong { color: var(--text); }
 
 /* Docs entry card */
+.ver-chip {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent-strong);
+  background: var(--accent-dim);
+  border: 1px solid rgba(69, 214, 192, 0.3);
+  border-radius: 999px;
+  padding: 2px 12px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 .docs-card {
   margin-top: 28px;
   background: linear-gradient(135deg, var(--panel), var(--panel-2));

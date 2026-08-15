@@ -29,11 +29,11 @@
     <h1>EuroScope <span class="accent">Data Bridge</span></h1>
     <p class="hero-sub">面向 EuroScope 模拟管制系统的插件 DLL：在本地启动 WebSocket 服务，将雷达、飞行计划、管制员等实时数据以 JSON 形式对外暴露，支持订阅推送与主动查询、修改。</p>
     <div class="hero-cta">
-      <a class="btn" href="wiki.html">阅读文档 →</a>
-      <a class="btn ghost" href="https://github.com/LeoChen98/EuroscopeDataBridge" target="_blank" rel="noopener">GitHub ↗</a>
+      <a class="btn" href="https://github.com/LeoChen98/EuroscopeDataBridge/releases/latest" target="_blank" rel="noopener">下载 ↗</a>
+      <a class="btn ghost" href="wiki.html">阅读文档 →</a>
     </div>
     <div class="badges">
-      <span class="badge">v1.1.1</span>
+      <span class="badge" data-version>latest</span>
       <span class="badge">C++17</span>
       <span class="badge">Win32 · x86</span>
       <span class="badge">JSON</span>
@@ -176,6 +176,19 @@ ws.onopen = () =&gt; {
         <p>覆盖连接方式、消息格式、全部 13 种推送事件与 55 种请求、数据结构参考、错误处理与配置常量，并附有完整请求 / 响应示例。</p>
       </div>
       <a class="btn" href="wiki.html">进入文档 →</a>
+    </div>
+  </section>
+
+  <!-- ======================= 07 下载 ======================= -->
+  <section class="sec" id="download">
+    <p class="sec-label">07 · 下载</p>
+    <h2>下载</h2>
+    <div class="docs-card">
+      <div>
+        <h3>Latest Release · <span class="ver-chip" data-version>latest</span></h3>
+        <p>从 GitHub Releases 获取预编译的 <code>EuroscopeDataBridge.dll</code>（Win32）。版本号自动取自最新 Release，下载后将其复制到 EuroScope 插件目录即可使用。</p>
+      </div>
+      <a class="btn" href="https://github.com/LeoChen98/EuroscopeDataBridge/releases/latest" target="_blank" rel="noopener">前往下载 ↗</a>
     </div>
   </section>
 </main>

@@ -98,4 +98,23 @@
   document.querySelectorAll('[data-year]').forEach(function (el) {
     el.textContent = String(new Date().getFullYear());
   });
+
+  /* --- Latest release version (GitHub API) -------------------------------- */
+  var verEls = Array.prototype.slice.call(document.querySelectorAll('[data-version]'));
+  if (verEls.length && window.fetch) {
+    fetch('https://api.github.com/repos/LeoChen98/EuroscopeDataBridge/releases/latest', {
+      headers: { Accept: 'application/vnd.github+json' }
+    })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+      .then(function (d) {
+        var tag = String(d.tag_name || '').trim();
+        if (!tag) return;
+        if (!/^v/i.test(tag)) tag = 'v' + tag;
+        verEls.forEach(function (el) {
+          el.textContent = tag;
+          el.title = 'Latest GitHub release: ' + tag;
+        });
+      })
+      .catch(function () { /* offline or rate-limited: keep the "latest" fallback */ });
+  }
 })();

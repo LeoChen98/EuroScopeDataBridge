@@ -7,14 +7,8 @@
 <meta name="description" content="EuroScope Data Bridge — local WebSocket API for live EuroScope flight data. 中 English / 中文 versions.">
 <link rel="stylesheet" href="assets/style.css">
 <script>
-  (function () {
-    var lang = (navigator.language || navigator.userLanguage || '').toLowerCase();
-    if (lang.indexOf('zh') === 0) {
-      location.replace('zh/index.html');
-    } else {
-      location.replace('en/index.html');
-    }
-  })();
+  // English is the default language.
+  location.replace('en/index.html');
 </script>
 </head>
 <body>
@@ -24,8 +18,8 @@
     <h1>EuroScope <span class="accent">Data Bridge</span></h1>
     <p class="hero-sub">Please choose your language · 请选择语言</p>
     <div class="hero-cta">
-      <a class="btn" href="zh/index.html">中文</a>
-      <a class="btn ghost" href="en/index.html">English</a>
+      <a class="btn" href="en/index.html">English</a>
+      <a class="btn ghost" href="zh/index.html">中文</a>
     </div>
   </div>
 </div>

@@ -109,9 +109,14 @@
       .then(function (d) {
         var tag = String(d.tag_name || '').trim();
         if (!tag) return;
-        if (!/^v/i.test(tag)) tag = 'v' + tag;
+        // The tag may look like "release/1.1.1" or "v1.1.1" — extract the
+        // semver part (MAJOR.MINOR.PATCH, optional -prerelease / +build).
+        var m = tag.match(
+          /(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?/
+        );
+        if (!m) return;
         verEls.forEach(function (el) {
-          el.textContent = tag;
+          el.textContent = m[0];
           el.title = 'Latest GitHub release: ' + tag;
         });
       })

@@ -32,7 +32,9 @@ jobs:
       #
       # 版本号支持 SemVer（含预发布段，如 1.1.1-beta.1）：PLUGIN_VERSION 保留完整
       # 字符串（含 -prerelease），数字宏 PLUGIN_VERSION_MAJOR/MINOR/PATCH 只取数字核心
-      # （Win32 版本资源仅支持数字）。
+      # （Win32 版本资源仅支持数字）。预发布版本发布时 draft 同时标记为 pre-release；
+      # vcpkg.json 的 version 同步更新（去掉 build 元数据，vcpkg 的 version-semver
+      # 不接受 +build）。
       - name: Bump plugin version from tag
         shell: pwsh
         run: |
@@ -104,6 +106,24 @@ jobs:
             $content = [regex]::Replace($content, '(PLUGIN_VERSION_PATCH\s+)\d+', "`${1}$patch")
             [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))
             Write-Host "Bumped PLUGIN_VERSION to $version (numeric core $major.$minor.$patch) in $path"
+
+            # vcpkg.json 的 version 同步更新。vcpkg 的 version-semver 不接受 build 元数据
+            # （+build），写入前将其剥离（SemVer 优先级本身忽略 build 元数据）。
+            $vcpkgPath = 'vcpkg.json'
+            $vcpkgVersion = $version -replace '\+.*$', ''
+            $vcpkgContent = [System.IO.File]::ReadAllText($vcpkgPath)
+            $vcpkgContent = [regex]::Replace($vcpkgContent, '("version"\s*:\s*")[^"]*(")', "`${1}$vcpkgVersion`${2}")
+            if (-not [regex]::IsMatch($vcpkgContent, '"version"\s*:\s*"' + [regex]::Escape($vcpkgVersion) + '"')) {
+              throw "Failed to rewrite the version field in $vcpkgPath"
+            }
+            [System.IO.File]::WriteAllText($vcpkgPath, $vcpkgContent, [System.Text.UTF8Encoding]::new($false))
+            Write-Host "Bumped vcpkg.json version to $vcpkgVersion"
+
+            # 预发布版本（数字核心后带 -prerelease 段）→ draft release 标记为 pre-release
+            $isPrerelease = ($version -match '^\d+\.\d+\.\d+-').ToString().ToLower()
+            "RELEASE_PRERELEASE=$isPrerelease" | Out-File -FilePath $env:GITHUB_ENV -Append
+            Write-Host "Prerelease flag: $isPrerelease"
+
             "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
             "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
           } else {
@@ -142,8 +162,8 @@ jobs:
           }
 
       # 将上面的版本号修改持久化提交到 main 分支（基于最新 origin/main，覆盖为 release 版本号），
-      # 保证 main 上的 src/Constants.h 与 release tag 保持一致。commit message 带 [skip ci]
-      # 以避免触发 build-main.yml 的重复构建。
+      # 保证 main 上的 src/Constants.h 与 vcpkg.json 跟 release tag 保持一致。commit message 带
+      # [skip ci] 以避免触发 build-main.yml 的重复构建。
       - name: Commit version bump to main
         if: env.SKIP_RELEASE != 'true'
         shell: pwsh
@@ -153,11 +173,13 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           # 备份 Bump 步骤修改后的文件，再切到最新 main 应用
           Copy-Item src/Constants.h "$env:RUNNER_TEMP\Constants.h.bumped"
+          Copy-Item vcpkg.json "$env:RUNNER_TEMP\vcpkg.json.bumped"
           git fetch origin main
-          git checkout -- src/Constants.h
+          git checkout -- src/Constants.h vcpkg.json
           git checkout -B ci/version-commit origin/main
           Copy-Item "$env:RUNNER_TEMP\Constants.h.bumped" src/Constants.h
-          git add src/Constants.h
+          Copy-Item "$env:RUNNER_TEMP\vcpkg.json.bumped" vcpkg.json
+          git add src/Constants.h vcpkg.json
           git diff --cached --quiet
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Version unchanged on main, nothing to commit"
@@ -169,7 +191,7 @@ jobs:
           # 恢复工作区到触发 commit，并应用已 bump 的版本文件，
           # 确保后续 Build 基于 tag 内容（而非 origin/main 可能更新的代码）构建。
           git checkout --detach "${{ github.sha }}"
-          git checkout ci/version-commit -- src/Constants.h
+          git checkout ci/version-commit -- src/Constants.h vcpkg.json
           Write-Host "Restored working tree to $env:RELEASE_TAG with bumped version"
 
       - name: Setup MSBuild
@@ -196,6 +218,9 @@ jobs:
           tag: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_VERSION }}
           draft: true
+          # 预发布 SemVer（如 1.1.1-beta.1）的 draft 同时标记为 pre-release，
+          # 这样 /releases/latest 不会选中它（网站版本徽章取 latest 正式版）。
+          prerelease: ${{ env.RELEASE_PRERELEASE == 'true' }}
           generateReleaseNotes: true
           # 只附加主工程输出（dll/lib/exp/pdb），排除 obj 中间目录；不包含测试工程产物
           artifacts: 'Release/*,!Release/obj'

@@ -15,7 +15,10 @@ namespace EuroScopeDataBridge.TestProject.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    private readonly WebSocketService _wsService;
+    private const int MaxLogEntries = 10000;
+    private const int MaxPendingRequests = 256;
+
+    private WebSocketService _wsService;
 
     // Tracks outstanding request ids so a response is routed to the table that
     // matches the request that produced it (flight plans / radar targets /
@@ -78,16 +81,19 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task ConnectAsync()
     {
+        // Detach the previous instance first: its teardown events (e.g. a late
+        // ConnectionChanged(false) from the old receive loop) must not flip
+        // the status of the new connection.
+        _wsService.MessageReceived -= OnMessageReceived;
+        _wsService.LogMessage -= OnLogMessage;
+        _wsService.ConnectionChanged -= OnConnectionChanged;
         _wsService.Dispose();
+
         var svc = new WebSocketService(Host, Port);
         svc.MessageReceived += OnMessageReceived;
         svc.LogMessage += OnLogMessage;
         svc.ConnectionChanged += OnConnectionChanged;
-
-        // Reassign through reflection since field is readonly
-        typeof(MainViewModel)
-            .GetField("_wsService", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .SetValue(this, svc);
+        _wsService = svc;
 
         await svc.ConnectAsync();
     }
@@ -112,7 +118,7 @@ public partial class MainViewModel : ObservableObject
     {
         var id = await _wsService.SendRequestAsync("get_flightplans");
         if (!string.IsNullOrEmpty(id))
-            _pendingRequestTypes[id] = "flightplans";
+            TrackRequest(id, "flightplans");
         AddLog("→ Requested flight plans");
     }
 
@@ -121,7 +127,7 @@ public partial class MainViewModel : ObservableObject
     {
         var id = await _wsService.SendRequestAsync("get_radar_targets");
         if (!string.IsNullOrEmpty(id))
-            _pendingRequestTypes[id] = "radar_targets";
+            TrackRequest(id, "radar_targets");
         AddLog("→ Requested radar targets");
     }
 
@@ -130,8 +136,18 @@ public partial class MainViewModel : ObservableObject
     {
         var id = await _wsService.SendRequestAsync("get_controllers");
         if (!string.IsNullOrEmpty(id))
-            _pendingRequestTypes[id] = "controllers";
+            TrackRequest(id, "controllers");
         AddLog("→ Requested controllers");
+    }
+
+    /// <summary>Register a pending request id, dropping the oldest entry when
+    /// the map reaches its cap so an unresponsive server cannot grow it
+    /// without bound.</summary>
+    private void TrackRequest(string id, string requestType)
+    {
+        if (_pendingRequestTypes.Count >= MaxPendingRequests)
+            _pendingRequestTypes.Remove(_pendingRequestTypes.Keys.First());
+        _pendingRequestTypes[id] = requestType;
     }
 
     [RelayCommand]
@@ -190,7 +206,10 @@ public partial class MainViewModel : ObservableObject
                         break;
 
                     case "error":
-                        AddLog($"ERROR: {msg.Error}");
+                        if (msg.Data is { } errData && errData.TryGetProperty("error", out var errProp))
+                            AddLog($"ERROR: {errProp.GetString()}");
+                        else
+                            AddLog("ERROR: (unknown)");
                         break;
 
                     default:
@@ -330,6 +349,13 @@ public partial class MainViewModel : ObservableObject
 
     private void AddLog(string entry)
     {
+        if (LogEntries.Count >= MaxLogEntries)
+        {
+            // Trim the oldest chunk so the log stays bounded on long sessions.
+            const int trimCount = 1000;
+            for (var i = 0; i < trimCount; i++)
+                LogEntries.RemoveAt(0);
+        }
         var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
         LogEntries.Add($"[{timestamp}] {entry}");
     }

@@ -109,11 +109,11 @@ EuroScope Data Bridge is an EuroScope plugin DLL that starts a WebSocket server 
 Communication modes:
 
 - **Push (subscription-based)**: EuroScope callback events are automatically serialized to JSON. A client must first send a `subscribe` request listing the event types it wants; after that, only subscribed clients receive the matching events. If no client has subscribed to an event type, the corresponding EuroScope callback is skipped entirely (no serialization, no push). See [Subscription](#subscription).
-- **Request/Response**: the client sends a request with a unique `id`; the server returns a response carrying the same `id` after processing. Requests are processed on the EuroScope main thread (OnTimer) to guarantee thread safety.
+- **Request/Response**: the client sends a request with a unique `id`; the server returns a response carrying the same `id` after processing. Requests are dequeued by the WebSocket server's drain thread, posted through a hidden message window and processed on the EuroScope main thread (with `OnTimer` as a fallback pump) to guarantee thread safety.
 
 Timing behavior:
 
-- A broadcast thread flushes queued messages to clients every **10 ms**.
+- The drain thread moves incoming requests to the main thread every **100 ms**.
 - A `timer` event is sent every **1 second** — but only to clients that subscribed to `timer`.
 
 ---
@@ -1867,6 +1867,7 @@ All errors are returned via `response` messages with `data.success` set to `fals
 | Error message | Trigger condition |
 |---------------|-------------------|
 | `Missing 'type' field` | The request is missing the `type` field |
+| `Invalid request: expected a JSON object` | The request payload is not a JSON object |
 | `Missing 'callsign' for setter operation` | A setter operation is missing `data.callsign` |
 | `Flight plan not found: <callsign>` | The specified flight plan does not exist |
 | `Radar target not found: <callsign>` | The specified radar target does not exist |
@@ -1875,6 +1876,8 @@ All errors are returned via `response` messages with `data.success` set to `fals
 | `Missing 'point' or 'time'` | `set_estimation` is missing `point` or `time` |
 | `Missing 'fp_callsign' or 'rt_callsign'` | `correlate` is missing parameters |
 | `Missing or invalid 'index' (0-8 required)` | `set_flight_strip_annotation` has an invalid `index` |
+| `Missing or invalid 'value' for set_communication_type` | `set_communication_type` has an empty or missing `value` |
+| `Failed to set <field>` | A setter returned an error (target invalid or value rejected) |
 | `Unknown message type: <type>` | Unsupported request type |
 | `Invalid JSON` | The request is not valid JSON (returned immediately, not queued for processing) |
 
@@ -1885,6 +1888,8 @@ All errors are returned via `response` messages with `data.success` set to `fals
 | Constant | Value | Description |
 |----------|-------|-------------|
 | WebSocket port | `48521` | Listens on `127.0.0.1` only |
-| Broadcast interval | `10 ms` | Queue flush broadcast interval |
+| Request processing interval | `100 ms` | Drain thread hands incoming requests to the main thread |
+| Max inbound message size | `1 MB` | Larger frames are rejected with the `message_too_big` protocol error |
+| Inbound queue size | `1024` | When full, the oldest queued request is dropped |
 | Timer interval | `1 s` | `timer` event frequency |
 

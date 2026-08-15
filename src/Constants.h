@@ -35,6 +35,14 @@ constexpr size_t MAX_CLIENT_SEND_QUEUE_FRAMES = 8192;
 // even when the EuroScope timer callback is stalled or absent.
 constexpr int DRAIN_INTERVAL_MS = 100;
 
+// Max inbound WebSocket message size accepted from a client (bytes). Larger
+// messages are rejected with the WebSocket "message_too_big" protocol error.
+constexpr size_t MAX_INCOMING_MESSAGE_BYTES = 1 * 1024 * 1024;  // 1 MB
+
+// Max pending inbound requests buffered between the WebSocket layer and the
+// EuroScope main thread. When full, the oldest request is dropped.
+constexpr size_t MAX_INCOMING_QUEUE_SIZE = 1024;
+
 // --- Connection Limits ---
 constexpr int    MAX_CLIENTS             = 64;    // hard cap on concurrent WebSocket clients
 

@@ -25,6 +25,7 @@
 #include <map>
 #include <set>
 #include <mutex>
+#include <deque>
 #include <functional>
 #include <windows.h>
 
@@ -40,7 +41,11 @@ namespace edb {
 //
 // Architecture:
 //   1 ASIO io_service thread (async I/O for all connections)
-//   + OnTimer-driven request processing on the EuroScope main thread
+//   1 drain thread (moves incoming requests into a pending queue and wakes
+//     the main thread via a hidden message window)
+//   + EuroScope main thread (the message window's WndProc — with OnTimer as
+//     fallback — executes the request processor, so every EuroScope SDK
+//     access happens on the main thread)
 //
 // Messages are routed per-client:
 //   - push events broadcast to all handshake-complete clients
@@ -107,11 +112,32 @@ public:
         m_requestProcessor = std::move(processor);
     }
 
-    // Drain and process all pending incoming messages.
-    // Call from the EuroScope main thread (OnTimer) periodically.
+    // Drain the raw incoming queue into the pending list and wake the main
+    // thread (PostMessage to the hidden message window).
+    // Call from the drain thread.
     void DrainIncomingQueue();
 
+    // Execute queued requests on the calling thread. Normally runs on the
+    // EuroScope main thread (message window WndProc, with OnTimer as a
+    // fallback pump). Safe to call from either.
+    void ProcessPendingRequests();
+
 private:
+    // --- Main-thread request dispatch ---
+    //
+    // The drain thread appends incoming requests to m_pendingRequests and
+    // posts WM_EDB_DRAIN to m_msgWindow (a hidden message-only window created
+    // on the EuroScope main thread). The window procedure runs on that thread
+    // and calls ProcessPendingRequests(), keeping all EuroScope SDK access on
+    // the main thread.
+    static LRESULT CALLBACK MsgWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    bool CreateMsgWindow();
+
+    // Post WM_EDB_DRAIN to the message window (drain thread). If the window is
+    // unavailable (creation failed), falls back to processing on the drain
+    // thread and logs a warning once.
+    void WakeMainThread();
+
     // --- Per-client session ---
     struct ClientSession {
         std::string clientId;       // UUID, assigned in on_open
@@ -152,6 +178,12 @@ private:
     std::thread m_drainThread;
     std::atomic<bool> m_running;
     std::atomic<bool> m_drainRunning{false};
+    bool m_wsaInitialized = false;
+
+    // Main-thread dispatch (see "Main-thread request dispatch" above)
+    HWND m_msgWindow = nullptr;
+    std::deque<std::string> m_pendingRequests;   // guarded by m_pendingMutex
+    std::mutex m_pendingMutex;
 
     // Client session management (protected by m_clientsMutex)
     std::mutex m_clientsMutex;

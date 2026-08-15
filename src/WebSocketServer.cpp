@@ -14,6 +14,9 @@ using json = nlohmann::json;
 
 namespace edb {
 
+// Message posted by the drain thread to the hidden main-thread window.
+constexpr UINT WM_EDB_DRAIN = WM_APP + 1;
+
 // ============================================================================
 // GenerateClientId — UUID via Windows UuidCreate, with a safe fallback
 // ============================================================================
@@ -33,14 +36,14 @@ std::string WebSocketServer::GenerateClientId() {
     if (szUuid != nullptr)
         RpcStringFreeA(&szUuid);
 
-    // Fallback: local timestamp + monotonic counter (never touches a null pointer)
-    SYSTEMTIME st;
-    GetLocalTime(&st);
-    char buf[80];
-    snprintf(buf, sizeof(buf), "%04u%02u%02u-%02u%02u%02u-%llu",
-             static_cast<unsigned>(st.wYear), static_cast<unsigned>(st.wMonth),
-             static_cast<unsigned>(st.wDay), static_cast<unsigned>(st.wHour),
-             static_cast<unsigned>(st.wMinute), static_cast<unsigned>(st.wSecond),
+    // Fallback: 100 ns file time + monotonic counter (finer resolution than
+    // the 1 s wall clock, keeps ids unique under rapid reconnect bursts).
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    const unsigned long long t =
+        (static_cast<unsigned long long>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+    char buf[96];
+    snprintf(buf, sizeof(buf), "%llu-%llu", t,
              static_cast<unsigned long long>(fallbackCounter.fetch_add(1)));
     return std::string(buf);
 }
@@ -53,22 +56,122 @@ WebSocketServer::WebSocketServer(int port, ThreadSafeQueue& incomingQueue)
     , m_incomingQueue(incomingQueue)
 {
     WSADATA wsaData;
-    WSAStartup(MAKEWORD(2, 2), &wsaData);
+    const int err = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    m_wsaInitialized = (err == 0);
+    if (!m_wsaInitialized)
+        std::cerr << "[DataBridge] WSAStartup failed with error " << err << std::endl;
 }
 
 WebSocketServer::~WebSocketServer() {
     Stop();
-    WSACleanup();
+    if (m_wsaInitialized)
+        WSACleanup();
 }
 
 // ============================================================================
-// DrainIncomingQueue — called from EuroScope main thread (OnTimer)
+// Main-thread request dispatch
+// ============================================================================
+
+LRESULT CALLBACK WebSocketServer::MsgWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    if (msg == WM_NCCREATE) {
+        auto* cs = reinterpret_cast<CREATESTRUCT*>(lParam);
+        SetWindowLongPtr(hWnd, GWLP_USERDATA,
+                         reinterpret_cast<LONG_PTR>(cs->lpCreateParams));
+        return DefWindowProc(hWnd, msg, wParam, lParam);
+    }
+
+    auto* self = reinterpret_cast<WebSocketServer*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+    if (msg == WM_EDB_DRAIN) {
+        if (self)
+            self->ProcessPendingRequests();
+        return 0;
+    }
+    return DefWindowProc(hWnd, msg, wParam, lParam);
+}
+
+bool WebSocketServer::CreateMsgWindow()
+{
+    static const wchar_t* kClassName = L"EDB_RequestDispatchWindow";
+    static bool classRegistered = false;
+
+    if (!classRegistered) {
+        WNDCLASSEXW wc = {};
+        wc.cbSize = sizeof(wc);
+        wc.lpfnWndProc = &WebSocketServer::MsgWndProc;
+        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.lpszClassName = kClassName;
+        if (!RegisterClassExW(&wc)) {
+            std::cerr << "[DataBridge] RegisterClassExW failed (error "
+                      << GetLastError() << ")" << std::endl;
+            return false;
+        }
+        classRegistered = true;
+    }
+
+    m_msgWindow = CreateWindowExW(0, kClassName, L"EDB", 0, 0, 0, 0, 0,
+                                  HWND_MESSAGE, nullptr,
+                                  GetModuleHandleW(nullptr), this);
+    if (!m_msgWindow) {
+        std::cerr << "[DataBridge] CreateWindowExW failed (error "
+                  << GetLastError() << ")" << std::endl;
+        return false;
+    }
+    return true;
+}
+
+void WebSocketServer::WakeMainThread()
+{
+    if (m_msgWindow) {
+        if (!PostMessage(m_msgWindow, WM_EDB_DRAIN, 0, 0)) {
+            std::cerr << "[DataBridge] PostMessage failed; requests deferred to the next timer tick" << std::endl;
+        }
+        return;
+    }
+
+    // Window unavailable (creation failed): degrade to processing on the
+    // drain thread. This accesses the EuroScope SDK off the main thread and
+    // is unsafe — warn exactly once so the operator knows to check.
+    if (!m_pendingRequests.empty()) {
+        static std::once_flag warned;
+        std::call_once(warned, [] {
+            std::cerr << "[DataBridge] WARNING: main-thread message window unavailable; "
+                         "processing requests on the drain thread" << std::endl;
+        });
+        ProcessPendingRequests();
+    }
+}
+
+void WebSocketServer::ProcessPendingRequests()
+{
+    if (!m_requestProcessor)
+        return;
+
+    std::deque<std::string> batch;
+    {
+        std::lock_guard<std::mutex> lock(m_pendingMutex);
+        batch.swap(m_pendingRequests);
+    }
+
+    for (auto& req : batch) {
+        try {
+            m_requestProcessor(std::move(req));
+        } catch (...) {
+            std::cerr << "[DataBridge] Exception while processing a request" << std::endl;
+        }
+    }
+}
+
+// ============================================================================
+// DrainIncomingQueue — called from the drain thread
 // ============================================================================
 void WebSocketServer::DrainIncomingQueue() {
     if (!m_requestProcessor) return;
     m_incomingQueue.Drain([this](std::string&& req) {
-        m_requestProcessor(std::move(req));
+        std::lock_guard<std::mutex> lock(m_pendingMutex);
+        m_pendingRequests.push_back(std::move(req));
     });
+    WakeMainThread();
 }
 
 // ============================================================================
@@ -79,9 +182,14 @@ bool WebSocketServer::Start() {
         return false;
 
     try {
+        // Re-arm the ASIO io_service so Stop() → Start() reuse works.
+        m_server.reset();
         m_server.init_asio();
 
         m_server.set_reuse_addr(true);
+
+        // Reject oversized frames before they are buffered (memory guard).
+        m_server.set_max_message_size(MAX_INCOMING_MESSAGE_BYTES);
 
         // Keep error logging enabled for diagnostics
         m_server.clear_access_channels(websocketpp::log::alevel::all);
@@ -116,6 +224,14 @@ bool WebSocketServer::Start() {
         return false;
     }
 
+    // Hidden message-only window: its WndProc runs on this thread (the
+    // EuroScope main thread, since Start() is called from the plugin
+    // constructor). The drain thread posts WM_EDB_DRAIN to it.
+    if (!CreateMsgWindow()) {
+        LogError("[DataBridge] WARNING: failed to create request dispatch window; "
+                 "requests will be processed on the drain thread (unsafe)");
+    }
+
     // Start ASIO event loop in a dedicated thread
     m_running.store(true);
     m_ioThread = std::thread([this]() {
@@ -137,10 +253,10 @@ bool WebSocketServer::Start() {
         std::cout << "[DataBridge] ASIO run() returned" << std::endl;
     });
 
-    // Start the drain thread: periodically processes incoming client requests
-    // on its own schedule, independent of EuroScope's OnTimer callback.
-    // NOTE: the request processor runs here, so any EuroScope SDK access it
-    // performs happens off the EuroScope main thread.
+    // Start the drain thread: dequeues incoming client requests into the
+    // pending list and posts WM_EDB_DRAIN to the hidden message window, whose
+    // WndProc runs on the EuroScope main thread. OnTimer acts as a fallback
+    // pump, so every EuroScope SDK access stays on the main thread.
     m_drainRunning.store(true);
     m_drainThread = std::thread([this]() {
         while (m_drainRunning.load()) {
@@ -200,11 +316,23 @@ void WebSocketServer::Stop() {
     if (m_ioThread.joinable())
         m_ioThread.join();
 
+    // Destroy the dispatch window after both worker threads are gone so no
+    // PostMessage can target a dead window. Stop() runs on the window's
+    // creating thread (EuroScope main thread at plugin exit).
+    if (m_msgWindow) {
+        DestroyWindow(m_msgWindow);
+        m_msgWindow = nullptr;
+    }
+
     {
         std::lock_guard<std::mutex> lock(m_clientsMutex);
         m_sessions.clear();
         m_clientIdToHdl.clear();
         m_subscriptionCounts.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(m_pendingMutex);
+        m_pendingRequests.clear();
     }
 }
 
@@ -296,25 +424,34 @@ void WebSocketServer::OnMessage(ConnectionHdl hdl, WsServer::message_ptr msg) {
 
     const std::string& payload = msg->get_payload();
 
-    try {
-        json j = json::parse(payload);
-        // Reject non-object payloads: contains()/operator[] on a string, array
-        // or number would throw type_error(305).
-        if (!j.is_object() || !j.contains(json_key::TYPE)) {
-            return;
-        }
-
-        j[json_key::CLIENT_ID] = clientId;
-        m_incomingQueue.Push(j.dump());
-
-    } catch (const json::exception&) {
+    auto sendError = [this, &hdl](const char* message) {
         json err;
         err[json_key::TYPE] = msg_type::ERROR;
-        err[json_key::DATA][json_key::ERROR] = "Invalid JSON";
+        err[json_key::DATA][json_key::ERROR] = message;
         websocketpp::lib::error_code ec;
         m_server.send(hdl, err.dump(), websocketpp::frame::opcode::text, ec);
+    };
+
+    json j;
+    try {
+        j = json::parse(payload);
+    } catch (const json::exception&) {
+        sendError("Invalid JSON");
         return;
     }
+    // Reject non-object payloads: contains()/operator[] on a string, array
+    // or number would throw type_error(305).
+    if (!j.is_object()) {
+        sendError("Invalid request: expected a JSON object");
+        return;
+    }
+    if (!j.contains(json_key::TYPE)) {
+        sendError("Missing 'type' field");
+        return;
+    }
+
+    j[json_key::CLIENT_ID] = clientId;
+    m_incomingQueue.PushWithLimit(j.dump(), MAX_INCOMING_QUEUE_SIZE);
 }
 
 // ============================================================================

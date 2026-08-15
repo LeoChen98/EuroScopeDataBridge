@@ -109,11 +109,11 @@ EuroScope Data Bridge 是一个 EuroScope 插件 DLL，在本地 `ws://127.0.0.1
 通信模式：
 
 - **Push（订阅推送）**：EuroScope 回调事件自动序列化为 JSON。客户端需先用 `subscribe` 请求订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件对应的回调会被跳过（不做序列化与推送）。详见 [订阅](#订阅)。
-- **Request/Response（请求/响应）**：客户端发送带唯一 `id` 的请求，服务端在处理后返回带有相同 `id` 的响应。请求在 EuroScope 主线程（OnTimer）中处理，保证线程安全。
+- **Request/Response（请求/响应）**：客户端发送带唯一 `id` 的请求，服务端在处理后返回带有相同 `id` 的响应。请求由 WebSocket 服务器的 drain 线程出队，经隐藏消息窗口转交 EuroScope 主线程处理（`OnTimer` 作为兜底），保证线程安全。
 
 定时行为：
 
-- 每 **10 ms** 广播线程将出队队列中的消息批量发送给客户端。
+- drain 线程每 **100 ms** 将入站请求转交主线程处理。
 - 每 **1 秒** 触发 `timer` 事件——但仅推送给订阅了 `timer` 的客户端。
 
 ---
@@ -1867,6 +1867,7 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 | 错误消息 | 触发条件 |
 |----------|----------|
 | `Missing 'type' field` | 请求缺少 `type` 字段 |
+| `Invalid request: expected a JSON object` | 请求负载不是 JSON 对象 |
 | `Missing 'callsign' for setter operation` | 设置操作缺少 `data.callsign` |
 | `Flight plan not found: <callsign>` | 指定的飞行计划不存在 |
 | `Radar target not found: <callsign>` | 指定的雷达目标不存在 |
@@ -1875,6 +1876,8 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 | `Missing 'point' or 'time'` | `set_estimation` 缺少 `point` 或 `time` |
 | `Missing 'fp_callsign' or 'rt_callsign'` | `correlate` 缺少参数 |
 | `Missing or invalid 'index' (0-8 required)` | `set_flight_strip_annotation` 的 `index` 无效 |
+| `Missing or invalid 'value' for set_communication_type` | `set_communication_type` 的 `value` 为空或缺失 |
+| `Failed to set <field>` | 设置操作执行失败（目标无效或数值被拒绝） |
 | `Unknown message type: <type>` | 不支持的请求类型 |
 | `Invalid JSON` | 请求不是合法的 JSON（立即返回错误，不进入处理队列） |
 
@@ -1885,5 +1888,7 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 | 常量 | 值 | 说明 |
 |------|-----|------|
 | WebSocket 端口 | `48521` | 仅监听 `127.0.0.1` |
-| 广播间隔 | `10 ms` | 出队队列批量广播间隔 |
+| 请求处理间隔 | `100 ms` | drain 线程将入站请求转交主线程的间隔 |
+| 入站消息大小上限 | `1 MB` | 超限帧以 `message_too_big` 协议错误拒绝 |
+| 入站队列上限 | `1024` | 队列满时丢弃最旧请求 |
 | 定时器间隔 | `1 s` | `timer` 事件频率 |

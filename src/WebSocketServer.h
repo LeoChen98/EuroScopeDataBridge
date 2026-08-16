@@ -25,6 +25,7 @@
 #include <map>
 #include <set>
 #include <mutex>
+#include <condition_variable>
 #include <functional>
 #include <windows.h>
 
@@ -37,9 +38,10 @@ namespace edb {
 // WebSocketServer — WebSocket++ based server for local EuroScope
 //
 // Architecture:
-//   1 ASIO io_service thread: async I/O for all connections. Incoming
-//     requests are processed inline in the message handler and responded to
-//     immediately — no interval-triggered queue, no additional threads.
+//   1 ASIO io_service thread: async I/O for all connections. Valid uplink
+//     requests are handed to a dedicated per-request worker thread so the IO
+//     thread never blocks on request processing; the worker sends the
+//     response as soon as it is ready.
 //
 // Messages are routed per-client:
 //   - push events broadcast to all handshake-complete clients
@@ -98,10 +100,10 @@ public:
         m_errorCallback = std::move(cb);
     }
 
-    // Set a callback for processing incoming requests. Invoked inline from
-    // the ASIO IO thread as soon as a message arrives, so the response is
-    // sent immediately. The callback receives the raw JSON request string
-    // (with client_id already injected).
+    // Set a callback for processing incoming requests. Invoked on a dedicated
+    // per-request worker thread (never the ASIO IO thread); the worker sends
+    // the response as soon as it is ready. The callback receives the raw JSON
+    // request string (with client_id already injected).
     void SetRequestProcessor(std::function<void(std::string&&)> processor) {
         m_requestProcessor = std::move(processor);
     }
@@ -150,6 +152,13 @@ private:
     // Start() after Stop() re-arms the stopped io_service via reset()
     // instead of calling init_asio() again.
     bool m_asioInitialized = false;
+
+    // Per-request worker tracking: workers are detached threads that
+    // decrement m_activeWorkers on exit; Stop() waits for the count to reach
+    // zero before tearing down so no worker outlives the DLL.
+    std::atomic<int> m_activeWorkers{0};
+    std::mutex m_workersMutex;
+    std::condition_variable m_workersCv;
 
     // Client session management (protected by m_clientsMutex)
     std::mutex m_clientsMutex;

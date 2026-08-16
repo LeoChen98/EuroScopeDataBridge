@@ -18,7 +18,7 @@ EuroScope 模拟飞行管制插件 DLL，通过本地 WebSocket API 对外暴露
 ```
 
 - **Push（订阅推送）**：EuroScope 回调事件（雷达、飞行计划、管制员、聊天、METAR 等）自动序列化为 JSON。客户端需先用 `subscribe` 请求订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件对应的回调会被跳过（不做序列化与推送）。
-- **Pull/Request（拉/请求模式）**：客户端发送 JSON 请求（如 `get_flightplans`、`get_full_snapshot`）。请求到达后立即内联处理，结果即时通过 WebSocket 返回。
+- **Pull/Request（拉/请求模式）**：客户端发送 JSON 请求（如 `get_flightplans`、`get_full_snapshot`）。每个请求在独立的异步工作线程中处理，WebSocket IO 线程不再阻塞；结果就绪后即时返回。
 - **定时事件**：`timer` 事件（含 tick 计数器）每秒触发一次，同样只在客户端订阅后推送，方便客户端做定时轮询或心跳检测。
 
 ## 技术栈

@@ -188,6 +188,13 @@ void WebSocketServer::Stop() {
     if (m_ioThread.joinable())
         m_ioThread.join();
 
+    // Wait for all in-flight per-request workers before tearing down state:
+    // no worker may outlive the DLL unload.
+    {
+        std::unique_lock<std::mutex> lock(m_workersMutex);
+        m_workersCv.wait(lock, [this] { return m_activeWorkers.load() == 0; });
+    }
+
     {
         std::lock_guard<std::mutex> lock(m_clientsMutex);
         m_sessions.clear();
@@ -271,7 +278,7 @@ void WebSocketServer::OnFail(ConnectionHdl hdl) {
 }
 
 // ============================================================================
-// OnMessage — parse JSON, inject clientId, process inline, respond immediately
+// OnMessage — parse JSON, inject clientId, dispatch to a worker thread
 // ============================================================================
 void WebSocketServer::OnMessage(ConnectionHdl hdl, WsServer::message_ptr msg) {
     std::string clientId;
@@ -312,15 +319,27 @@ void WebSocketServer::OnMessage(ConnectionHdl hdl, WsServer::message_ptr msg) {
 
     if (!m_requestProcessor) return;
 
-    // Process inline on the ASIO IO thread so the response goes out
-    // immediately — no interval-triggered queue. One bad request must not
-    // take down the IO loop.
-    j[json_key::CLIENT_ID] = clientId;
-    try {
-        m_requestProcessor(j.dump());
-    } catch (...) {
-        std::cerr << "[DataBridge] Exception while processing a request inline" << std::endl;
+    // Cap concurrent workers so a request flood cannot exhaust threads.
+    if (m_activeWorkers.load() >= MAX_CONCURRENT_REQUESTS) {
+        sendError("Server busy: too many in-flight requests");
+        return;
     }
+
+    // Hand the request to a dedicated worker thread: the ASIO IO thread
+    // stays free for I/O, and the response is sent as soon as the worker
+    // finishes.
+    j[json_key::CLIENT_ID] = clientId;
+    std::string requestJson = j.dump();
+    m_activeWorkers.fetch_add(1);
+    std::thread([this, requestJson = std::move(requestJson)]() mutable {
+        try {
+            m_requestProcessor(std::move(requestJson));
+        } catch (...) {
+            std::cerr << "[DataBridge] Exception while processing a request on a worker thread" << std::endl;
+        }
+        m_activeWorkers.fetch_sub(1);
+        m_workersCv.notify_all();
+    }).detach();
 }
 
 // ============================================================================

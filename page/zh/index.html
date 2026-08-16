@@ -55,7 +55,7 @@
     <div class="about-grid">
       <div class="about-item"><span class="k">连接方式</span><span class="v">WebSocket，仅监听 <code>127.0.0.1</code> 本机回环地址</span></div>
       <div class="about-item"><span class="k">通信协议</span><span class="v">JSON 文本消息：请求 / 响应 / 推送事件</span></div>
-      <div class="about-item"><span class="k">线程模型</span><span class="v">请求到达即内联处理，响应即时返回</span></div>
+      <div class="about-item"><span class="k">线程模型</span><span class="v">每个请求独立异步线程处理，IO 线程零阻塞</span></div>
       <div class="about-item"><span class="k">背压保护</span><span class="v">每客户端发送队列上限 32 MB，防止内存无限增长</span></div>
     </div>
   </section>
@@ -109,7 +109,7 @@
       <div class="card">
         <span class="idx">ROBUST / 04</span>
         <h3>稳健可靠</h3>
-        <p>请求到达即内联处理、响应即时返回；背压保护应对高负载，连接异常自动清理。</p>
+        <p>每请求独立异步线程、IO 线程零阻塞；背压保护应对高负载，连接异常自动清理。</p>
       </div>
     </div>
   </section>

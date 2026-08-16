@@ -55,7 +55,7 @@
     <div class="about-grid">
       <div class="about-item"><span class="k">Connection</span><span class="v">WebSocket, listening on <code>127.0.0.1</code> (loopback only)</span></div>
       <div class="about-item"><span class="k">Protocol</span><span class="v">JSON text messages: request / response / push events</span></div>
-      <div class="about-item"><span class="k">Threading</span><span class="v">Requests are processed inline on arrival with immediate responses</span></div>
+      <div class="about-item"><span class="k">Threading</span><span class="v">Each request runs on its own async worker thread; the IO thread never blocks</span></div>
       <div class="about-item"><span class="k">Backpressure</span><span class="v">32 MB per-client send queue cap guards against unbounded memory growth</span></div>
     </div>
   </section>
@@ -109,7 +109,7 @@
       <div class="card">
         <span class="idx">ROBUST / 04</span>
         <h3>Robust &amp; reliable</h3>
-        <p>Requests are processed inline with immediate responses; the backpressure guard handles load spikes, with automatic cleanup on disconnect.</p>
+        <p>Each request runs on its own async worker thread; the backpressure guard handles load spikes, with automatic cleanup on disconnect.</p>
       </div>
     </div>
   </section>

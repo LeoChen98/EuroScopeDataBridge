@@ -31,11 +31,11 @@ DataBridgePlugin::DataBridgePlugin()
         DisplayUserMessage("message", "DataBridge", msg.c_str(), true, false, false, false, false);
     });
 
-    // Register request processor: executed on the server's dedicated drain
-    // thread, independent of EuroScope's OnTimer callback. Extracts client_id
-    // (injected by OnMessage), routes subscribe/unsubscribe to the
-    // subscription manager, otherwise calls HandleRequest and routes the
-    // response.
+    // Register request processor: executed on a dedicated per-request worker
+    // thread, so the server's ASIO IO thread never blocks on request
+    // handling. Extracts client_id (injected by OnMessage), routes
+    // subscribe/unsubscribe to the subscription manager, otherwise calls
+    // HandleRequest and routes the response.
     m_wsServer->SetRequestProcessor([this](std::string&& requestStr) {
         std::string clientId;
         std::string type;
@@ -333,9 +333,9 @@ void DataBridgePlugin::OnAirportRunwayActivityChanged(void)
 void DataBridgePlugin::OnTimer(int Counter)
 {
     try {
-    // Incoming WebSocket requests are processed inline by the server's
-    // message handler (ASIO IO thread) and responded to immediately — not
-    // here, and not via an interval-triggered queue.
+    // Incoming WebSocket requests are processed on dedicated per-request
+    // worker threads and responded to as soon as they finish — not here, and
+    // not on the server's ASIO IO thread.
 
     // Send timer event every second (only to subscribers)
     if (m_wsServer->HasSubscribers(msg_type::TIMER))

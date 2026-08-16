@@ -37,6 +37,10 @@ constexpr size_t MAX_INCOMING_MESSAGE_BYTES = 1 * 1024 * 1024;  // 1 MB
 // --- Connection Limits ---
 constexpr int    MAX_CLIENTS             = 64;    // hard cap on concurrent WebSocket clients
 
+// Max concurrently running per-request worker threads. Requests beyond the
+// cap get an immediate "Server busy" error instead of spawning a thread.
+constexpr int    MAX_CONCURRENT_REQUESTS = 16;
+
 // ============================================================================
 // Message Type String Constants (Push)
 // ============================================================================

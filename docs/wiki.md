@@ -109,7 +109,7 @@ EuroScope Data Bridge is an EuroScope plugin DLL that starts a WebSocket server 
 Communication modes:
 
 - **Push (subscription-based)**: EuroScope callback events are automatically serialized to JSON. A client must first send a `subscribe` request listing the event types it wants; after that, only subscribed clients receive the matching events. If no client has subscribed to an event type, the corresponding EuroScope callback is skipped entirely (no serialization, no push). See [Subscription](#subscription).
-- **Request/Response**: the client sends a request with a unique `id`; the server returns a response carrying the same `id` after processing. Requests are processed inline as soon as they arrive, so the response is sent immediately.
+- **Request/Response**: the client sends a request with a unique `id`; the server returns a response carrying the same `id` after processing. Each request is processed asynchronously on its own worker thread, so the WebSocket IO thread never blocks; the response is sent as soon as it is ready.
 
 Timing behavior:
 
@@ -1877,6 +1877,7 @@ All errors are returned via `response` messages with `data.success` set to `fals
 | `Missing or invalid 'index' (0-8 required)` | `set_flight_strip_annotation` has an invalid `index` |
 | `Missing or invalid 'value' for set_communication_type` | `set_communication_type` has an empty or missing `value` |
 | `Failed to set <field>` | A setter returned an error (target invalid or value rejected) |
+| `Server busy: too many in-flight requests` | The concurrent request cap (16) is reached |
 | `Unknown message type: <type>` | Unsupported request type |
 | `Invalid JSON` | The request is not valid JSON (returned immediately, not queued for processing) |
 
@@ -1888,5 +1889,6 @@ All errors are returned via `response` messages with `data.success` set to `fals
 |----------|-------|-------------|
 | WebSocket port | `48521` | Listens on `127.0.0.1` only |
 | Max inbound message size | `1 MB` | Larger frames are rejected with the `message_too_big` protocol error |
+| Max concurrent requests | `16` | Requests beyond the cap get an immediate `Server busy` error |
 | Timer interval | `1 s` | `timer` event frequency |
 

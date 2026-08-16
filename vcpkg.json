@@ -1,6 +1,6 @@
 {
   "name": "euroscope-data-bridge",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "EuroScope plugin DLL exposing WebSocket API for external data access",
   "builtin-baseline": "b4ae67c6051bb665f9414fca5c66f66cacc71970",
   "dependencies": [

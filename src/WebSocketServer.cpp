@@ -14,9 +14,6 @@ using json = nlohmann::json;
 
 namespace edb {
 
-// Message posted by the drain thread to the hidden main-thread window.
-constexpr UINT WM_EDB_DRAIN = WM_APP + 1;
-
 // ============================================================================
 // GenerateClientId — UUID via Windows UuidCreate, with a safe fallback
 // ============================================================================
@@ -69,109 +66,13 @@ WebSocketServer::~WebSocketServer() {
 }
 
 // ============================================================================
-// Main-thread request dispatch
-// ============================================================================
-
-LRESULT CALLBACK WebSocketServer::MsgWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-    if (msg == WM_NCCREATE) {
-        auto* cs = reinterpret_cast<CREATESTRUCT*>(lParam);
-        SetWindowLongPtr(hWnd, GWLP_USERDATA,
-                         reinterpret_cast<LONG_PTR>(cs->lpCreateParams));
-        return DefWindowProc(hWnd, msg, wParam, lParam);
-    }
-
-    auto* self = reinterpret_cast<WebSocketServer*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
-    if (msg == WM_EDB_DRAIN) {
-        if (self)
-            self->ProcessPendingRequests();
-        return 0;
-    }
-    return DefWindowProc(hWnd, msg, wParam, lParam);
-}
-
-bool WebSocketServer::CreateMsgWindow()
-{
-    static const wchar_t* kClassName = L"EDB_RequestDispatchWindow";
-    static bool classRegistered = false;
-
-    if (!classRegistered) {
-        WNDCLASSEXW wc = {};
-        wc.cbSize = sizeof(wc);
-        wc.lpfnWndProc = &WebSocketServer::MsgWndProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
-        wc.lpszClassName = kClassName;
-        if (!RegisterClassExW(&wc)) {
-            std::cerr << "[DataBridge] RegisterClassExW failed (error "
-                      << GetLastError() << ")" << std::endl;
-            return false;
-        }
-        classRegistered = true;
-    }
-
-    m_msgWindow = CreateWindowExW(0, kClassName, L"EDB", 0, 0, 0, 0, 0,
-                                  HWND_MESSAGE, nullptr,
-                                  GetModuleHandleW(nullptr), this);
-    if (!m_msgWindow) {
-        std::cerr << "[DataBridge] CreateWindowExW failed (error "
-                  << GetLastError() << ")" << std::endl;
-        return false;
-    }
-    return true;
-}
-
-void WebSocketServer::WakeMainThread()
-{
-    if (m_msgWindow) {
-        if (!PostMessage(m_msgWindow, WM_EDB_DRAIN, 0, 0)) {
-            std::cerr << "[DataBridge] PostMessage failed; requests deferred to the next timer tick" << std::endl;
-        }
-        return;
-    }
-
-    // Window unavailable (creation failed): degrade to processing on the
-    // drain thread. This accesses the EuroScope SDK off the main thread and
-    // is unsafe — warn exactly once so the operator knows to check.
-    if (!m_pendingRequests.empty()) {
-        static std::once_flag warned;
-        std::call_once(warned, [] {
-            std::cerr << "[DataBridge] WARNING: main-thread message window unavailable; "
-                         "processing requests on the drain thread" << std::endl;
-        });
-        ProcessPendingRequests();
-    }
-}
-
-void WebSocketServer::ProcessPendingRequests()
-{
-    if (!m_requestProcessor)
-        return;
-
-    std::deque<std::string> batch;
-    {
-        std::lock_guard<std::mutex> lock(m_pendingMutex);
-        batch.swap(m_pendingRequests);
-    }
-
-    for (auto& req : batch) {
-        try {
-            m_requestProcessor(std::move(req));
-        } catch (...) {
-            std::cerr << "[DataBridge] Exception while processing a request" << std::endl;
-        }
-    }
-}
-
-// ============================================================================
-// DrainIncomingQueue — called from the drain thread
+// DrainIncomingQueue — called from the EuroScope main thread (OnTimer)
 // ============================================================================
 void WebSocketServer::DrainIncomingQueue() {
     if (!m_requestProcessor) return;
     m_incomingQueue.Drain([this](std::string&& req) {
-        std::lock_guard<std::mutex> lock(m_pendingMutex);
-        m_pendingRequests.push_back(std::move(req));
+        m_requestProcessor(std::move(req));
     });
-    WakeMainThread();
 }
 
 // ============================================================================
@@ -235,14 +136,6 @@ bool WebSocketServer::Start() {
         return false;
     }
 
-    // Hidden message-only window: its WndProc runs on this thread (the
-    // EuroScope main thread, since Start() is called from the plugin
-    // constructor). The drain thread posts WM_EDB_DRAIN to it.
-    if (!CreateMsgWindow()) {
-        LogError("[DataBridge] WARNING: failed to create request dispatch window; "
-                 "requests will be processed on the drain thread (unsafe)");
-    }
-
     // Start ASIO event loop in a dedicated thread
     m_running.store(true);
     m_ioThread = std::thread([this]() {
@@ -264,22 +157,6 @@ bool WebSocketServer::Start() {
         std::cout << "[DataBridge] ASIO run() returned" << std::endl;
     });
 
-    // Start the drain thread: dequeues incoming client requests into the
-    // pending list and posts WM_EDB_DRAIN to the hidden message window, whose
-    // WndProc runs on the EuroScope main thread. OnTimer acts as a fallback
-    // pump, so every EuroScope SDK access stays on the main thread.
-    m_drainRunning.store(true);
-    m_drainThread = std::thread([this]() {
-        while (m_drainRunning.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(DRAIN_INTERVAL_MS));
-            try {
-                DrainIncomingQueue();
-            } catch (...) {
-                std::cerr << "[DataBridge] Exception in drain thread" << std::endl;
-            }
-        }
-    });
-
     {
         std::ostringstream oss;
         oss << "[DataBridge] WebSocket server listening on ws://127.0.0.1:" << m_port;
@@ -292,11 +169,6 @@ bool WebSocketServer::Start() {
 // Stop
 // ============================================================================
 void WebSocketServer::Stop() {
-    // Stop the drain thread first so no request processing races shutdown.
-    m_drainRunning.store(false);
-    if (m_drainThread.joinable())
-        m_drainThread.join();
-
     if (m_running.load()) {
         m_running.store(false);
 
@@ -327,23 +199,11 @@ void WebSocketServer::Stop() {
     if (m_ioThread.joinable())
         m_ioThread.join();
 
-    // Destroy the dispatch window after both worker threads are gone so no
-    // PostMessage can target a dead window. Stop() runs on the window's
-    // creating thread (EuroScope main thread at plugin exit).
-    if (m_msgWindow) {
-        DestroyWindow(m_msgWindow);
-        m_msgWindow = nullptr;
-    }
-
     {
         std::lock_guard<std::mutex> lock(m_clientsMutex);
         m_sessions.clear();
         m_clientIdToHdl.clear();
         m_subscriptionCounts.clear();
-    }
-    {
-        std::lock_guard<std::mutex> lock(m_pendingMutex);
-        m_pendingRequests.clear();
     }
 }
 

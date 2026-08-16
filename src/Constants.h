@@ -30,10 +30,9 @@ constexpr size_t MAX_CLIENT_SEND_QUEUE_BYTES = 32 * 1024 * 1024;  // 32 MB
 // to query the number of queued frames, so backpressure is byte-based only.
 constexpr size_t MAX_CLIENT_SEND_QUEUE_FRAMES = 8192;
 
-// Interval (ms) of the dedicated drain thread that processes incoming client
-// requests. Kept independent of EuroScope's OnTimer so requests are serviced
-// even when the EuroScope timer callback is stalled or absent.
-constexpr int DRAIN_INTERVAL_MS = 100;
+// Cadence of the EuroScope OnTimer callback (main thread); incoming client
+// requests are drained and processed on that beat.
+constexpr int TIMER_INTERVAL_MS = 1000;
 
 // Max inbound WebSocket message size accepted from a client (bytes). Larger
 // messages are rejected with the WebSocket "message_too_big" protocol error.

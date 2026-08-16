@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
@@ -43,8 +44,17 @@ public partial class MainWindow : Window
     private void OnLogEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (e.Action != NotifyCollectionChangedAction.Add) return;
-        if (!_logPinnedToBottom || LogListBox.Items.Count == 0) return;
-        LogListBox.ScrollIntoView(LogListBox.Items[LogListBox.Items.Count - 1]);
+        if (!_logPinnedToBottom) return;
+        // Defer the scroll: touching Items while the CollectionChanged
+        // notification is still in flight makes the ItemsControl
+        // inconsistent with its items source (the ItemCollection is being
+        // regenerated) and throws InvalidOperationException. Scroll after
+        // the change has fully settled on the dispatcher.
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+        {
+            if (!_logPinnedToBottom || LogListBox.Items.Count == 0) return;
+            LogListBox.ScrollIntoView(LogListBox.Items[LogListBox.Items.Count - 1]);
+        }));
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject

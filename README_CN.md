@@ -12,13 +12,14 @@ EuroScope 模拟飞行管制插件 DLL，通过本地 WebSocket API 对外暴露
 │                      │    JSON Push Events + Request/Response    │  (网页 / 脚本 /   │
 │  DataBridgePlugin    │                                           │   数据分析工具)   │
 │  ├─ ES Callbacks     │                                           └──────────────────┘
-│  ├─ OnTimer → Drain  │
+│  ├─ 每请求工作线程        │
 │  └─ FullSnapshot     │
 └──────────────────────┘
 ```
 
 - **Push（订阅推送）**：EuroScope 回调事件（雷达、飞行计划、管制员、聊天、METAR 等）自动序列化为 JSON。客户端需先用 `subscribe` 请求订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件对应的回调会被跳过（不做序列化与推送）。
-- **Pull/Request（拉/请求模式）**：客户端发送 JSON 请求（如 `get_flightplans`、`get_full_snapshot`），在 EuroScope 主线程上处理，结果通过 WebSocket 返回。
+- **Pull/Request（拉/请求模式）**：客户端发送 JSON 请求（如 `get_flightplans`、`get_full_snapshot`）。每个请求在独立的异步工作线程中处理，WebSocket IO 线程不再阻塞；结果就绪后即时返回。
+- **心跳（可选）**：客户端可发送 `ping`，服务端立即回复 `pong`——配合 `timer` 事件可用于连接健康检测。
 - **定时事件**：`timer` 事件（含 tick 计数器）每秒触发一次，同样只在客户端订阅后推送，方便客户端做定时轮询或心跳检测。
 
 ## 技术栈
@@ -106,7 +107,7 @@ ws.send(JSON.stringify({
   - 连接/断开 WebSocket（默认 `127.0.0.1:48521`，Host/Port 可配置），含连接状态指示灯与消息计数
   - 快捷查询：Get Flight Plans / Get Radar Targets / Get Controllers，结果以表格展示
   - 自定义命令：输入任意 JSON 请求（如 `{"type":"get_flightplans"}`）并发送
-  - 实时日志面板：显示所有收发的消息
+  - 实时日志面板：显示所有收发的消息，支持右键「Copy JSON」把某行的完整原始 JSON 复制到剪贴板；滚动条位于底部时列表自动跟随最新行滚动
 
 **运行方法**：确保 EuroScope 已加载插件 DLL 并启动 WebSocket 服务，然后用 Visual Studio 2022 打开 `EuroscopeDataBridge.sln`，将 `EuroScopeDataBridge.TestProject` 设为启动项目运行（或执行 `dotnet run --project tests/EuroScopeDataBridge.TestProject`，需 .NET 8 SDK）。
 

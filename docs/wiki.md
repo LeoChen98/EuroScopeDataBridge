@@ -27,6 +27,7 @@
 - [Subscription](#subscription)
   - [subscribe](#subscribe)
   - [unsubscribe](#unsubscribe)
+- [Heartbeat (ping / pong)](#heartbeat-ping--pong)
 - [Requests (client → server)](#requests-client--server)
   - [Query](#query)
     - [get_flightplans](#get_flightplans)
@@ -109,11 +110,10 @@ EuroScope Data Bridge is an EuroScope plugin DLL that starts a WebSocket server 
 Communication modes:
 
 - **Push (subscription-based)**: EuroScope callback events are automatically serialized to JSON. A client must first send a `subscribe` request listing the event types it wants; after that, only subscribed clients receive the matching events. If no client has subscribed to an event type, the corresponding EuroScope callback is skipped entirely (no serialization, no push). See [Subscription](#subscription).
-- **Request/Response**: the client sends a request with a unique `id`; the server returns a response carrying the same `id` after processing. Requests are processed on the EuroScope main thread (OnTimer) to guarantee thread safety.
+- **Request/Response**: the client sends a request with a unique `id`; the server returns a response carrying the same `id` after processing. Each request is processed asynchronously on its own worker thread, so the WebSocket IO thread never blocks; the response is sent as soon as it is ready.
 
 Timing behavior:
 
-- A broadcast thread flushes queued messages to clients every **10 ms**.
 - A `timer` event is sent every **1 second** — but only to clients that subscribed to `timer`.
 
 ---
@@ -173,6 +173,8 @@ Push events are only sent to clients that subscribed to their `type` (see [Subsc
 | `data` | object | Event data |
 
 ### Response format
+
+> **Note**: `subscribe` / `unsubscribe` responses use `"type": "subscription"` instead of the `"response"` shown below (see [Subscription](#subscription)).
 
 #### Success
 
@@ -526,7 +528,7 @@ Adds the given event types to the client's subscription set. Repeatable — call
 
 ```json
 {
-  "type": "response",
+  "type": "subscription",
   "id": "sub-1",
   "data": {
     "success": true,
@@ -563,7 +565,7 @@ The response has the same shape as `subscribe` (`success` + current `events`).
 
 ```json
 {
-  "type": "response",
+  "type": "subscription",
   "id": "sub-1",
   "data": {
     "success": false,
@@ -571,6 +573,27 @@ The response has the same shape as `subscribe` (`success` + current `events`).
   }
 }
 ```
+
+---
+
+## Heartbeat (ping / pong)
+
+Application-level heartbeats are supported but **not enforced**: a client may send `ping` at any time and the server replies with `pong` immediately. Combine with the subscribed `timer` event for connection health checks.
+
+**Request example:**
+
+```json
+{ "type": "ping", "id": "hb-1" }
+```
+
+**Response example:**
+
+```json
+{ "type": "pong", "id": "hb-1" }
+```
+
+- `id` is optional; `pong` echoes the `id` carried by the `ping` (omitted when absent)
+- pings are answered inline on the IO thread and never consume a concurrent-request slot
 
 ---
 
@@ -1867,6 +1890,7 @@ All errors are returned via `response` messages with `data.success` set to `fals
 | Error message | Trigger condition |
 |---------------|-------------------|
 | `Missing 'type' field` | The request is missing the `type` field |
+| `Invalid request: expected a JSON object` | The request payload is not a JSON object |
 | `Missing 'callsign' for setter operation` | A setter operation is missing `data.callsign` |
 | `Flight plan not found: <callsign>` | The specified flight plan does not exist |
 | `Radar target not found: <callsign>` | The specified radar target does not exist |
@@ -1875,8 +1899,11 @@ All errors are returned via `response` messages with `data.success` set to `fals
 | `Missing 'point' or 'time'` | `set_estimation` is missing `point` or `time` |
 | `Missing 'fp_callsign' or 'rt_callsign'` | `correlate` is missing parameters |
 | `Missing or invalid 'index' (0-8 required)` | `set_flight_strip_annotation` has an invalid `index` |
+| `Missing or invalid 'value' for set_communication_type` | `set_communication_type` has an empty or missing `value` |
+| `Failed to set <field>` | A setter returned an error (target invalid or value rejected) |
+| `Server busy: too many in-flight requests` | The concurrent request cap (64) is reached |
 | `Unknown message type: <type>` | Unsupported request type |
-| `Invalid JSON` | The request is not valid JSON (returned immediately, not queued for processing) |
+| `Invalid JSON` | The request is not valid JSON (rejected immediately without processing) |
 
 ---
 
@@ -1885,6 +1912,9 @@ All errors are returned via `response` messages with `data.success` set to `fals
 | Constant | Value | Description |
 |----------|-------|-------------|
 | WebSocket port | `48521` | Listens on `127.0.0.1` only |
-| Broadcast interval | `10 ms` | Queue flush broadcast interval |
+| Max concurrent clients | `64` | New connections beyond the cap are rejected |
+| Max inbound message size | `1 MB` | Larger frames are rejected with the `message_too_big` protocol error |
+| Max concurrent requests | `64` | Requests beyond the cap get an immediate `Server busy` error |
+| Per-client send queue | `32 MB` | Backpressure guard; frames are dropped for slow consumers |
 | Timer interval | `1 s` | `timer` event frequency |
 

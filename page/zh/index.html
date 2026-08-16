@@ -55,7 +55,7 @@
     <div class="about-grid">
       <div class="about-item"><span class="k">连接方式</span><span class="v">WebSocket，仅监听 <code>127.0.0.1</code> 本机回环地址</span></div>
       <div class="about-item"><span class="k">通信协议</span><span class="v">JSON 文本消息：请求 / 响应 / 推送事件</span></div>
-      <div class="about-item"><span class="k">线程模型</span><span class="v">请求在 EuroScope 主线程处理，线程安全队列中转</span></div>
+      <div class="about-item"><span class="k">线程模型</span><span class="v">每个请求独立异步线程处理，IO 线程零阻塞</span></div>
       <div class="about-item"><span class="k">背压保护</span><span class="v">每客户端发送队列上限 32 MB，防止内存无限增长</span></div>
     </div>
   </section>
@@ -68,7 +68,7 @@
     <div class="diagram">
       <div class="diagram-node">
         <h3>EuroScope（主线程）</h3>
-        <p>DataBridgePlugin<br>ES 回调 · OnTimer → Drain<br>FullSnapshot</p>
+        <p>DataBridgePlugin<br>ES 回调 · 每请求工作线程<br>FullSnapshot</p>
       </div>
       <div class="diagram-link">
         <span class="wire">ws://127.0.0.1:48521</span>
@@ -81,7 +81,8 @@
     </div>
     <ul class="mode-list">
       <li><strong>Push（订阅推送）</strong> — EuroScope 回调事件自动序列化为 JSON。客户端需先 <code>subscribe</code> 订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件的回调会被完全跳过（零序列化、零推送）。</li>
-      <li><strong>Pull / Request（拉 / 请求模式）</strong> — 客户端发送 JSON 请求（如 <code>get_flightplans</code>、<code>get_full_snapshot</code>），请求在 EuroScope 主线程上处理，结果通过 WebSocket 返回。</li>
+      <li><strong>Pull / Request（拉 / 请求模式）</strong> — 客户端发送 JSON 请求（如 <code>get_flightplans</code>、<code>get_full_snapshot</code>），每个请求在独立的异步工作线程中处理，响应就绪后即时通过 WebSocket 返回。</li>
+      <li><strong>心跳（可选）</strong> — 客户端可发送 <code>ping</code>，服务端立即回复 <code>pong</code>；不强制，可配合 <code>timer</code> 事件做连接健康检测。</li>
       <li><strong>定时事件</strong> — <code>timer</code> 事件（含 tick 计数器）每秒触发一次，同样仅在客户端订阅后推送，便于定时轮询或心跳检测。</li>
     </ul>
   </section>
@@ -109,7 +110,7 @@
       <div class="card">
         <span class="idx">ROBUST / 04</span>
         <h3>稳健可靠</h3>
-        <p>主线程处理保证数据安全，线程安全队列与背压保护应对高负载，连接异常自动清理。</p>
+        <p>每请求独立异步线程、IO 线程零阻塞；背压保护应对高负载，连接异常自动清理。</p>
       </div>
     </div>
   </section>

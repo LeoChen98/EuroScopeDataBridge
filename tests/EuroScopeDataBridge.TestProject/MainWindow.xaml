@@ -139,14 +139,23 @@
             </DockPanel>
 
             <!-- Log -->
-            <ListBox Grid.Row="1" ItemsSource="{Binding LogEntries}"
+            <ListBox x:Name="LogListBox" Grid.Row="1" ItemsSource="{Binding LogEntries}"
+                     SelectedItem="{Binding SelectedLogEntry}"
+                     PreviewMouseRightButtonDown="LogListBox_PreviewMouseRightButtonDown"
                      Background="#1E1E1E" Foreground="#DCDCDC"
                      FontFamily="Consolas" FontSize="12"
                      HorizontalContentAlignment="Stretch"
                      VirtualizingPanel.ScrollUnit="Pixel">
+                <ListBox.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Copy JSON"
+                                  Command="{Binding PlacementTarget.DataContext.CopyLogJsonCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                    </ContextMenu>
+                </ListBox.ContextMenu>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>

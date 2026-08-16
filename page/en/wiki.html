@@ -55,6 +55,7 @@
     <a class="toc-link toc-l2" href="#subscription">Subscription</a>
     <a class="toc-link toc-l3" href="#subscribe">subscribe</a>
     <a class="toc-link toc-l3" href="#unsubscribe">unsubscribe</a>
+    <a class="toc-link toc-l2" href="#heartbeat-ping--pong">Heartbeat (ping / pong)</a>
     <a class="toc-link toc-l2" href="#requests-client--server">Requests (client → server)</a>
     <a class="toc-link toc-l3" href="#query">Query</a>
     <a class="toc-link toc-l4" href="#get_flightplans">get_flightplans</a>
@@ -136,9 +137,9 @@
 <h2 id="overview">Overview</h2>
 <p>EuroScope Data Bridge is an EuroScope plugin DLL that starts a WebSocket server on local <code>ws://127.0.0.1:48521</code>. All communication uses JSON.</p>
 <p>Communication modes:</p>
-<ul><li><strong>Push (subscription-based)</strong>: EuroScope callback events are automatically serialized to JSON. A client must first send a <code>subscribe</code> request listing the event types it wants; after that, only subscribed clients receive the matching events. If no client has subscribed to an event type, the corresponding EuroScope callback is skipped entirely (no serialization, no push). See <a href="#subscription">Subscription</a>.</li><li><strong>Request/Response</strong>: the client sends a request with a unique <code>id</code>; the server returns a response carrying the same <code>id</code> after processing. Requests are processed on the EuroScope main thread (OnTimer) to guarantee thread safety.</li></ul>
+<ul><li><strong>Push (subscription-based)</strong>: EuroScope callback events are automatically serialized to JSON. A client must first send a <code>subscribe</code> request listing the event types it wants; after that, only subscribed clients receive the matching events. If no client has subscribed to an event type, the corresponding EuroScope callback is skipped entirely (no serialization, no push). See <a href="#subscription">Subscription</a>.</li><li><strong>Request/Response</strong>: the client sends a request with a unique <code>id</code>; the server returns a response carrying the same <code>id</code> after processing. Each request is processed asynchronously on its own worker thread, so the WebSocket IO thread never blocks; the response is sent as soon as it is ready.</li></ul>
 <p>Timing behavior:</p>
-<ul><li>A broadcast thread flushes queued messages to clients every <strong>10 ms</strong>.</li><li>A <code>timer</code> event is sent every <strong>1 second</strong> — but only to clients that subscribed to <code>timer</code>.</li></ul>
+<ul><li>A <code>timer</code> event is sent every <strong>1 second</strong> — but only to clients that subscribed to <code>timer</code>.</li></ul>
 <hr>
 <h2 id="connection">Connection</h2>
 <div class="table-wrap"><table><thead><tr><th>Property</th><th>Value</th></tr></thead><tbody><tr><td>Protocol</td><td>WebSocket (ws)</td></tr><tr><td>Host</td><td><code>127.0.0.1</code> (local only)</td></tr><tr><td>Port</td><td><code>48521</code></td></tr></tbody></table></div>
@@ -183,6 +184,7 @@
 </div>
 <div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>type</code></td><td>string</td><td>Event type</td></tr><tr><td><code>data</code></td><td>object</td><td>Event data</td></tr></tbody></table></div>
 <h3 id="response-format">Response format</h3>
+<blockquote><strong>Note</strong>: <code>subscribe</code> / <code>unsubscribe</code> responses use <code>&quot;type&quot;: &quot;subscription&quot;</code> instead of the <code>&quot;response&quot;</code> shown below (see <a href="#subscription">Subscription</a>).</blockquote>
 <h4 id="success">Success</h4>
 <div class="code-block">
   <div class="code-head">
@@ -465,7 +467,7 @@
     <button class="code-copy" type="button" aria-label="Copy">Copy</button>
   </div>
   <pre><code class="lang-json">{
-  &quot;type&quot;: &quot;response&quot;,
+  &quot;type&quot;: &quot;subscription&quot;,
   &quot;id&quot;: &quot;sub-1&quot;,
   &quot;data&quot;: {
     &quot;success&quot;: true,
@@ -496,7 +498,7 @@
     <button class="code-copy" type="button" aria-label="Copy">Copy</button>
   </div>
   <pre><code class="lang-json">{
-  &quot;type&quot;: &quot;response&quot;,
+  &quot;type&quot;: &quot;subscription&quot;,
   &quot;id&quot;: &quot;sub-1&quot;,
   &quot;data&quot;: {
     &quot;success&quot;: false,
@@ -504,6 +506,26 @@
   }
 }</code></pre>
 </div>
+<hr>
+<h2 id="heartbeat-ping--pong">Heartbeat (ping / pong)</h2>
+<p>Application-level heartbeats are supported but <strong>not enforced</strong>: a client may send <code>ping</code> at any time and the server replies with <code>pong</code> immediately. Combine with the subscribed <code>timer</code> event for connection health checks.</p>
+<p><strong>Request example:</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;ping&quot;, &quot;id&quot;: &quot;hb-1&quot; }</code></pre>
+</div>
+<p><strong>Response example:</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;pong&quot;, &quot;id&quot;: &quot;hb-1&quot; }</code></pre>
+</div>
+<ul><li><code>id</code> is optional; <code>pong</code> echoes the <code>id</code> carried by the <code>ping</code> (omitted when absent)</li><li>pings are answered inline on the IO thread and never consume a concurrent-request slot</li></ul>
 <hr>
 <h2 id="requests-client--server">Requests (client → server)</h2>
 <h3 id="query">Query</h3>
@@ -1587,10 +1609,10 @@
 <h2 id="error-handling">Error handling</h2>
 <p>All errors are returned via <code>response</code> messages with <code>data.success</code> set to <code>false</code>.</p>
 <h3 id="common-error-messages">Common error messages</h3>
-<div class="table-wrap"><table><thead><tr><th>Error message</th><th>Trigger condition</th></tr></thead><tbody><tr><td><code>Missing 'type' field</code></td><td>The request is missing the <code>type</code> field</td></tr><tr><td><code>Missing 'callsign' for setter operation</code></td><td>A setter operation is missing <code>data.callsign</code></td></tr><tr><td><code>Flight plan not found: &lt;callsign&gt;</code></td><td>The specified flight plan does not exist</td></tr><tr><td><code>Radar target not found: &lt;callsign&gt;</code></td><td>The specified radar target does not exist</td></tr><tr><td><code>Voice channel not found: &lt;name&gt;</code></td><td>The specified voice channel was not found</td></tr><tr><td><code>Missing 'target' controller</code></td><td><code>initiate_handoff</code> or <code>push_flight_strip</code> is missing <code>target</code></td></tr><tr><td><code>Missing 'point' or 'time'</code></td><td><code>set_estimation</code> is missing <code>point</code> or <code>time</code></td></tr><tr><td><code>Missing 'fp_callsign' or 'rt_callsign'</code></td><td><code>correlate</code> is missing parameters</td></tr><tr><td><code>Missing or invalid 'index' (0-8 required)</code></td><td><code>set_flight_strip_annotation</code> has an invalid <code>index</code></td></tr><tr><td><code>Unknown message type: &lt;type&gt;</code></td><td>Unsupported request type</td></tr><tr><td><code>Invalid JSON</code></td><td>The request is not valid JSON (returned immediately, not queued for processing)</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>Error message</th><th>Trigger condition</th></tr></thead><tbody><tr><td><code>Missing 'type' field</code></td><td>The request is missing the <code>type</code> field</td></tr><tr><td><code>Invalid request: expected a JSON object</code></td><td>The request payload is not a JSON object</td></tr><tr><td><code>Missing 'callsign' for setter operation</code></td><td>A setter operation is missing <code>data.callsign</code></td></tr><tr><td><code>Flight plan not found: &lt;callsign&gt;</code></td><td>The specified flight plan does not exist</td></tr><tr><td><code>Radar target not found: &lt;callsign&gt;</code></td><td>The specified radar target does not exist</td></tr><tr><td><code>Voice channel not found: &lt;name&gt;</code></td><td>The specified voice channel was not found</td></tr><tr><td><code>Missing 'target' controller</code></td><td><code>initiate_handoff</code> or <code>push_flight_strip</code> is missing <code>target</code></td></tr><tr><td><code>Missing 'point' or 'time'</code></td><td><code>set_estimation</code> is missing <code>point</code> or <code>time</code></td></tr><tr><td><code>Missing 'fp_callsign' or 'rt_callsign'</code></td><td><code>correlate</code> is missing parameters</td></tr><tr><td><code>Missing or invalid 'index' (0-8 required)</code></td><td><code>set_flight_strip_annotation</code> has an invalid <code>index</code></td></tr><tr><td><code>Missing or invalid 'value' for set_communication_type</code></td><td><code>set_communication_type</code> has an empty or missing <code>value</code></td></tr><tr><td><code>Failed to set &lt;field&gt;</code></td><td>A setter returned an error (target invalid or value rejected)</td></tr><tr><td><code>Server busy: too many in-flight requests</code></td><td>The concurrent request cap (64) is reached</td></tr><tr><td><code>Unknown message type: &lt;type&gt;</code></td><td>Unsupported request type</td></tr><tr><td><code>Invalid JSON</code></td><td>The request is not valid JSON (rejected immediately without processing)</td></tr></tbody></table></div>
 <hr>
 <h2 id="configuration-constants">Configuration constants</h2>
-<div class="table-wrap"><table><thead><tr><th>Constant</th><th>Value</th><th>Description</th></tr></thead><tbody><tr><td>WebSocket port</td><td><code>48521</code></td><td>Listens on <code>127.0.0.1</code> only</td></tr><tr><td>Broadcast interval</td><td><code>10 ms</code></td><td>Queue flush broadcast interval</td></tr><tr><td>Timer interval</td><td><code>1 s</code></td><td><code>timer</code> event frequency</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>Constant</th><th>Value</th><th>Description</th></tr></thead><tbody><tr><td>WebSocket port</td><td><code>48521</code></td><td>Listens on <code>127.0.0.1</code> only</td></tr><tr><td>Max concurrent clients</td><td><code>64</code></td><td>New connections beyond the cap are rejected</td></tr><tr><td>Max inbound message size</td><td><code>1 MB</code></td><td>Larger frames are rejected with the <code>message_too_big</code> protocol error</td></tr><tr><td>Max concurrent requests</td><td><code>64</code></td><td>Requests beyond the cap get an immediate <code>Server busy</code> error</td></tr><tr><td>Per-client send queue</td><td><code>32 MB</code></td><td>Backpressure guard; frames are dropped for slow consumers</td></tr><tr><td>Timer interval</td><td><code>1 s</code></td><td><code>timer</code> event frequency</td></tr></tbody></table></div>
   </article>
 </main>
 <footer class="foot">

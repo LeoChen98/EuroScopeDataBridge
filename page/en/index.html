@@ -55,7 +55,7 @@
     <div class="about-grid">
       <div class="about-item"><span class="k">Connection</span><span class="v">WebSocket, listening on <code>127.0.0.1</code> (loopback only)</span></div>
       <div class="about-item"><span class="k">Protocol</span><span class="v">JSON text messages: request / response / push events</span></div>
-      <div class="about-item"><span class="k">Threading</span><span class="v">Requests processed on the EuroScope main thread via a thread-safe queue</span></div>
+      <div class="about-item"><span class="k">Threading</span><span class="v">Each request runs on its own async worker thread; the IO thread never blocks</span></div>
       <div class="about-item"><span class="k">Backpressure</span><span class="v">32 MB per-client send queue cap guards against unbounded memory growth</span></div>
     </div>
   </section>
@@ -68,7 +68,7 @@
     <div class="diagram">
       <div class="diagram-node">
         <h3>EuroScope (main thread)</h3>
-        <p>DataBridgePlugin<br>ES Callbacks · OnTimer → Drain<br>FullSnapshot</p>
+        <p>DataBridgePlugin<br>ES Callbacks · Per-request workers<br>FullSnapshot</p>
       </div>
       <div class="diagram-link">
         <span class="wire">ws://127.0.0.1:48521</span>
@@ -81,7 +81,8 @@
     </div>
     <ul class="mode-list">
       <li><strong>Push mode (subscription-based)</strong> — EuroScope callback events are automatically serialized to JSON. A client must first <code>subscribe</code> to the event types it is interested in; only subscribed clients receive the matching events. When no client has subscribed to an event type, its callback is skipped entirely (no serialization, no push).</li>
-      <li><strong>Pull / Request mode</strong> — clients send JSON requests (e.g. <code>get_flightplans</code>, <code>get_full_snapshot</code>), which are processed on the EuroScope main thread, with results returned over WebSocket.</li>
+      <li><strong>Pull / Request mode</strong> — clients send JSON requests (e.g. <code>get_flightplans</code>, <code>get_full_snapshot</code>); each request runs on its own async worker thread and the result is returned over WebSocket as soon as it is ready.</li>
+      <li><strong>Heartbeat (optional)</strong> — clients may send <code>ping</code> and the server replies <code>pong</code> immediately; not enforced, combines with the <code>timer</code> event for liveness detection.</li>
       <li><strong>Timed events</strong> — a <code>timer</code> event (with a tick counter) fires once per second, likewise only pushed to clients that subscribed to it — handy for polling or heartbeat detection.</li>
     </ul>
   </section>
@@ -109,7 +110,7 @@
       <div class="card">
         <span class="idx">ROBUST / 04</span>
         <h3>Robust &amp; reliable</h3>
-        <p>Main-thread processing keeps data safe; a thread-safe queue and backpressure guard handle load spikes, with automatic cleanup on disconnect.</p>
+        <p>Each request runs on its own async worker thread; the backpressure guard handles load spikes, with automatic cleanup on disconnect.</p>
       </div>
     </div>
   </section>

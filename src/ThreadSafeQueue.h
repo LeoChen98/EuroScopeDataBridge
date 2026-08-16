@@ -4,6 +4,7 @@
 #include <string>
 #include <mutex>
 #include <condition_variable>
+#include <iostream>
 
 namespace edb {
 
@@ -78,8 +79,12 @@ public:
         while (TryPop(item)) {
             try {
                 callback(std::move(item));
+            } catch (const std::exception& e) {
+                std::cerr << "[DataBridge] Exception while handling queued message: "
+                          << e.what() << std::endl;
             } catch (...) {
-                // ignore: continue with the remaining messages
+                std::cerr << "[DataBridge] Unknown exception while handling queued message"
+                          << std::endl;
             }
             ++count;
         }

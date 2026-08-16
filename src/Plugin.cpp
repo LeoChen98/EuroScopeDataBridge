@@ -24,16 +24,18 @@ DataBridgePlugin::DataBridgePlugin()
               PLUGIN_AUTHOR,
               PLUGIN_COPYRIGHT)
 {
-    m_wsServer = std::make_unique<WebSocketServer>(WS_PORT, m_incomingQueue);
+    m_wsServer = std::make_unique<WebSocketServer>(WS_PORT);
 
     // Forward WebSocketServer errors to EuroScope's message area
     m_wsServer->SetErrorCallback([this](const std::string& msg) {
         DisplayUserMessage("message", "DataBridge", msg.c_str(), true, false, false, false, false);
     });
 
-    // Register request processor: called from ES main thread via PostMessage or OnTimer fallback.
-    // Extracts client_id (injected by OnMessage), routes subscribe/unsubscribe to the
-    // subscription manager, otherwise calls HandleRequest and routes the response.
+    // Register request processor: executed on a dedicated per-request worker
+    // thread, so the server's ASIO IO thread never blocks on request
+    // handling. Extracts client_id (injected by OnMessage), routes
+    // subscribe/unsubscribe to the subscription manager, otherwise calls
+    // HandleRequest and routes the response.
     m_wsServer->SetRequestProcessor([this](std::string&& requestStr) {
         std::string clientId;
         std::string type;
@@ -325,15 +327,15 @@ void DataBridgePlugin::OnAirportRunwayActivityChanged(void)
 }
 
 // ============================================================================
-// OnTimer — Process incoming requests + send periodic events
+// OnTimer — Send periodic events
 // ============================================================================
 
 void DataBridgePlugin::OnTimer(int Counter)
 {
     try {
-    // Incoming WebSocket requests are drained by WebSocketServer's dedicated
-    // drain thread (DRAIN_INTERVAL_MS), not here — so request handling does
-    // not depend on EuroScope's timer callback.
+    // Incoming WebSocket requests are processed on dedicated per-request
+    // worker threads and responded to as soon as they finish — not here, and
+    // not on the server's ASIO IO thread.
 
     // Send timer event every second (only to subscribers)
     if (m_wsServer->HasSubscribers(msg_type::TIMER))

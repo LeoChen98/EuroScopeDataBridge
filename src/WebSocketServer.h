@@ -25,13 +25,12 @@
 #include <map>
 #include <set>
 #include <mutex>
+#include <condition_variable>
 #include <functional>
 #include <windows.h>
 
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
-
-#include "ThreadSafeQueue.h"
 
 namespace edb {
 
@@ -39,8 +38,10 @@ namespace edb {
 // WebSocketServer — WebSocket++ based server for local EuroScope
 //
 // Architecture:
-//   1 ASIO io_service thread (async I/O for all connections)
-//   + OnTimer-driven request processing on the EuroScope main thread
+//   1 ASIO io_service thread: async I/O for all connections. Valid uplink
+//     requests are handed to a dedicated per-request worker thread so the IO
+//     thread never blocks on request processing; the worker sends the
+//     response as soon as it is ready.
 //
 // Messages are routed per-client:
 //   - push events broadcast to all handshake-complete clients
@@ -52,8 +53,7 @@ public:
     using WsServer = websocketpp::server<websocketpp::config::asio>;
     using ConnectionHdl = websocketpp::connection_hdl;
 
-    // Constructor: port + shared incoming queue (EuroScope thread drains it).
-    WebSocketServer(int port, ThreadSafeQueue& incomingQueue);
+    explicit WebSocketServer(int port);
     ~WebSocketServer();
 
     // Non-copyable, non-movable
@@ -100,16 +100,13 @@ public:
         m_errorCallback = std::move(cb);
     }
 
-    // Set a callback for processing incoming requests.
-    // Called from the EuroScope main thread (via DrainIncomingQueue / OnTimer).
-    // The callback receives the raw JSON request string (with client_id already injected).
+    // Set a callback for processing incoming requests. Invoked on a dedicated
+    // per-request worker thread (never the ASIO IO thread); the worker sends
+    // the response as soon as it is ready. The callback receives the raw JSON
+    // request string (with client_id already injected).
     void SetRequestProcessor(std::function<void(std::string&&)> processor) {
         m_requestProcessor = std::move(processor);
     }
-
-    // Drain and process all pending incoming messages.
-    // Call from the EuroScope main thread (OnTimer) periodically.
-    void DrainIncomingQueue();
 
 private:
     // --- Per-client session ---
@@ -145,13 +142,23 @@ private:
     }
 
     int m_port;
-    ThreadSafeQueue& m_incomingQueue;
 
     WsServer m_server;
     std::thread m_ioThread;
-    std::thread m_drainThread;
     std::atomic<bool> m_running;
-    std::atomic<bool> m_drainRunning{false};
+    bool m_wsaInitialized = false;
+    // True once init_asio() has run. The asio transport may only be
+    // initialized once (its state never returns to UNINITIALIZED), so
+    // Start() after Stop() re-arms the stopped io_service via reset()
+    // instead of calling init_asio() again.
+    bool m_asioInitialized = false;
+
+    // Per-request worker tracking: workers are detached threads that
+    // decrement m_activeWorkers on exit; Stop() waits for the count to reach
+    // zero before tearing down so no worker outlives the DLL.
+    std::atomic<int> m_activeWorkers{0};
+    std::mutex m_workersMutex;
+    std::condition_variable m_workersCv;
 
     // Client session management (protected by m_clientsMutex)
     std::mutex m_clientsMutex;

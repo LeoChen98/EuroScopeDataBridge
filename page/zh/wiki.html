@@ -55,6 +55,7 @@
     <a class="toc-link toc-l2" href="#订阅">订阅</a>
     <a class="toc-link toc-l3" href="#subscribe">subscribe</a>
     <a class="toc-link toc-l3" href="#unsubscribe">unsubscribe</a>
+    <a class="toc-link toc-l2" href="#心跳ping--pong">心跳（Ping / Pong）</a>
     <a class="toc-link toc-l2" href="#请求客户端--服务端">请求（客户端 → 服务端）</a>
     <a class="toc-link toc-l3" href="#查询类">查询类</a>
     <a class="toc-link toc-l4" href="#get_flightplans">get_flightplans</a>
@@ -136,9 +137,9 @@
 <h2 id="概述">概述</h2>
 <p>EuroScope Data Bridge 是一个 EuroScope 插件 DLL，在本地 <code>ws://127.0.0.1:48521</code> 启动 WebSocket 服务。所有通信均使用 JSON 格式。</p>
 <p>通信模式：</p>
-<ul><li><strong>Push（订阅推送）</strong>：EuroScope 回调事件自动序列化为 JSON。客户端需先用 <code>subscribe</code> 请求订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件对应的回调会被跳过（不做序列化与推送）。详见 <a href="#订阅">订阅</a>。</li><li><strong>Request/Response（请求/响应）</strong>：客户端发送带唯一 <code>id</code> 的请求，服务端在处理后返回带有相同 <code>id</code> 的响应。请求在 EuroScope 主线程（OnTimer）中处理，保证线程安全。</li></ul>
+<ul><li><strong>Push（订阅推送）</strong>：EuroScope 回调事件自动序列化为 JSON。客户端需先用 <code>subscribe</code> 请求订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件对应的回调会被跳过（不做序列化与推送）。详见 <a href="#订阅">订阅</a>。</li><li><strong>Request/Response（请求/响应）</strong>：客户端发送带唯一 <code>id</code> 的请求，服务端在处理后返回带有相同 <code>id</code> 的响应。每个请求在独立的异步工作线程中处理，WebSocket IO 线程不再阻塞；响应就绪后即时返回。</li></ul>
 <p>定时行为：</p>
-<ul><li>每 <strong>10 ms</strong> 广播线程将出队队列中的消息批量发送给客户端。</li><li>每 <strong>1 秒</strong> 触发 <code>timer</code> 事件——但仅推送给订阅了 <code>timer</code> 的客户端。</li></ul>
+<ul><li>每 <strong>1 秒</strong> 触发 <code>timer</code> 事件——但仅推送给订阅了 <code>timer</code> 的客户端。</li></ul>
 <hr>
 <h2 id="连接">连接</h2>
 <div class="table-wrap"><table><thead><tr><th>属性</th><th>值</th></tr></thead><tbody><tr><td>协议</td><td>WebSocket (ws)</td></tr><tr><td>主机</td><td><code>127.0.0.1</code>（仅本地）</td></tr><tr><td>端口</td><td><code>48521</code></td></tr></tbody></table></div>
@@ -183,6 +184,7 @@
 </div>
 <div class="table-wrap"><table><thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>type</code></td><td>string</td><td>事件类型</td></tr><tr><td><code>data</code></td><td>object</td><td>事件数据</td></tr></tbody></table></div>
 <h3 id="响应格式">响应格式</h3>
+<blockquote><strong>注意</strong>：<code>subscribe</code> / <code>unsubscribe</code> 的响应使用 <code>&quot;type&quot;: &quot;subscription&quot;</code> 而非下文示例中的 <code>&quot;response&quot;</code>（见 <a href="#订阅">订阅</a>）。</blockquote>
 <h4 id="成功">成功</h4>
 <div class="code-block">
   <div class="code-head">
@@ -465,7 +467,7 @@
     <button class="code-copy" type="button" aria-label="Copy">Copy</button>
   </div>
   <pre><code class="lang-json">{
-  &quot;type&quot;: &quot;response&quot;,
+  &quot;type&quot;: &quot;subscription&quot;,
   &quot;id&quot;: &quot;sub-1&quot;,
   &quot;data&quot;: {
     &quot;success&quot;: true,
@@ -496,7 +498,7 @@
     <button class="code-copy" type="button" aria-label="Copy">Copy</button>
   </div>
   <pre><code class="lang-json">{
-  &quot;type&quot;: &quot;response&quot;,
+  &quot;type&quot;: &quot;subscription&quot;,
   &quot;id&quot;: &quot;sub-1&quot;,
   &quot;data&quot;: {
     &quot;success&quot;: false,
@@ -504,6 +506,26 @@
   }
 }</code></pre>
 </div>
+<hr>
+<h2 id="心跳ping--pong">心跳（Ping / Pong）</h2>
+<p>支持但<strong>不强制</strong>应用层心跳：客户端可随时发送 <code>ping</code>，服务端立即回复 <code>pong</code>。可配合订阅的 <code>timer</code> 事件做连接健康检测。</p>
+<p><strong>请求示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;ping&quot;, &quot;id&quot;: &quot;hb-1&quot; }</code></pre>
+</div>
+<p><strong>响应示例：</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;pong&quot;, &quot;id&quot;: &quot;hb-1&quot; }</code></pre>
+</div>
+<ul><li><code>id</code> 为可选字段；<code>pong</code> 会原样回显 <code>ping</code> 中携带的 <code>id</code>（未携带则不返回）</li><li>心跳在 IO 线程内联处理、立即响应，不占用并发请求配额</li></ul>
 <hr>
 <h2 id="请求客户端--服务端">请求（客户端 → 服务端）</h2>
 <h3 id="查询类">查询类</h3>
@@ -1587,10 +1609,10 @@
 <h2 id="错误处理">错误处理</h2>
 <p>所有错误通过 <code>response</code> 消息返回，<code>data.success</code> 为 <code>false</code>。</p>
 <h3 id="常见错误消息">常见错误消息</h3>
-<div class="table-wrap"><table><thead><tr><th>错误消息</th><th>触发条件</th></tr></thead><tbody><tr><td><code>Missing 'type' field</code></td><td>请求缺少 <code>type</code> 字段</td></tr><tr><td><code>Missing 'callsign' for setter operation</code></td><td>设置操作缺少 <code>data.callsign</code></td></tr><tr><td><code>Flight plan not found: &lt;callsign&gt;</code></td><td>指定的飞行计划不存在</td></tr><tr><td><code>Radar target not found: &lt;callsign&gt;</code></td><td>指定的雷达目标不存在</td></tr><tr><td><code>Voice channel not found: &lt;name&gt;</code></td><td>指定的语音频道未找到</td></tr><tr><td><code>Missing 'target' controller</code></td><td><code>initiate_handoff</code> 或 <code>push_flight_strip</code> 缺少 <code>target</code></td></tr><tr><td><code>Missing 'point' or 'time'</code></td><td><code>set_estimation</code> 缺少 <code>point</code> 或 <code>time</code></td></tr><tr><td><code>Missing 'fp_callsign' or 'rt_callsign'</code></td><td><code>correlate</code> 缺少参数</td></tr><tr><td><code>Missing or invalid 'index' (0-8 required)</code></td><td><code>set_flight_strip_annotation</code> 的 <code>index</code> 无效</td></tr><tr><td><code>Unknown message type: &lt;type&gt;</code></td><td>不支持的请求类型</td></tr><tr><td><code>Invalid JSON</code></td><td>请求不是合法的 JSON（立即返回错误，不进入处理队列）</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>错误消息</th><th>触发条件</th></tr></thead><tbody><tr><td><code>Missing 'type' field</code></td><td>请求缺少 <code>type</code> 字段</td></tr><tr><td><code>Invalid request: expected a JSON object</code></td><td>请求负载不是 JSON 对象</td></tr><tr><td><code>Missing 'callsign' for setter operation</code></td><td>设置操作缺少 <code>data.callsign</code></td></tr><tr><td><code>Flight plan not found: &lt;callsign&gt;</code></td><td>指定的飞行计划不存在</td></tr><tr><td><code>Radar target not found: &lt;callsign&gt;</code></td><td>指定的雷达目标不存在</td></tr><tr><td><code>Voice channel not found: &lt;name&gt;</code></td><td>指定的语音频道未找到</td></tr><tr><td><code>Missing 'target' controller</code></td><td><code>initiate_handoff</code> 或 <code>push_flight_strip</code> 缺少 <code>target</code></td></tr><tr><td><code>Missing 'point' or 'time'</code></td><td><code>set_estimation</code> 缺少 <code>point</code> 或 <code>time</code></td></tr><tr><td><code>Missing 'fp_callsign' or 'rt_callsign'</code></td><td><code>correlate</code> 缺少参数</td></tr><tr><td><code>Missing or invalid 'index' (0-8 required)</code></td><td><code>set_flight_strip_annotation</code> 的 <code>index</code> 无效</td></tr><tr><td><code>Missing or invalid 'value' for set_communication_type</code></td><td><code>set_communication_type</code> 的 <code>value</code> 为空或缺失</td></tr><tr><td><code>Failed to set &lt;field&gt;</code></td><td>设置操作执行失败（目标无效或数值被拒绝）</td></tr><tr><td><code>Server busy: too many in-flight requests</code></td><td>并发请求达到上限（64）</td></tr><tr><td><code>Unknown message type: &lt;type&gt;</code></td><td>不支持的请求类型</td></tr><tr><td><code>Invalid JSON</code></td><td>请求不是合法的 JSON（立即返回错误，不做处理）</td></tr></tbody></table></div>
 <hr>
 <h2 id="配置常量">配置常量</h2>
-<div class="table-wrap"><table><thead><tr><th>常量</th><th>值</th><th>说明</th></tr></thead><tbody><tr><td>WebSocket 端口</td><td><code>48521</code></td><td>仅监听 <code>127.0.0.1</code></td></tr><tr><td>广播间隔</td><td><code>10 ms</code></td><td>出队队列批量广播间隔</td></tr><tr><td>定时器间隔</td><td><code>1 s</code></td><td><code>timer</code> 事件频率</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>常量</th><th>值</th><th>说明</th></tr></thead><tbody><tr><td>WebSocket 端口</td><td><code>48521</code></td><td>仅监听 <code>127.0.0.1</code></td></tr><tr><td>并发客户端上限</td><td><code>64</code></td><td>超过后新连接被拒绝</td></tr><tr><td>入站消息大小上限</td><td><code>1 MB</code></td><td>超限帧以 <code>message_too_big</code> 协议错误拒绝</td></tr><tr><td>并发请求上限</td><td><code>64</code></td><td>超出后立即返回 <code>Server busy</code> 错误</td></tr><tr><td>每客户端发送队列上限</td><td><code>32 MB</code></td><td>背压保护，慢消费者丢弃帧</td></tr><tr><td>定时器间隔</td><td><code>1 s</code></td><td><code>timer</code> 事件频率</td></tr></tbody></table></div>
   </article>
 </main>
 <footer class="foot">

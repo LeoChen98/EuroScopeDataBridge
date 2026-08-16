@@ -33,14 +33,14 @@ std::string WebSocketServer::GenerateClientId() {
     if (szUuid != nullptr)
         RpcStringFreeA(&szUuid);
 
-    // Fallback: local timestamp + monotonic counter (never touches a null pointer)
-    SYSTEMTIME st;
-    GetLocalTime(&st);
-    char buf[80];
-    snprintf(buf, sizeof(buf), "%04u%02u%02u-%02u%02u%02u-%llu",
-             static_cast<unsigned>(st.wYear), static_cast<unsigned>(st.wMonth),
-             static_cast<unsigned>(st.wDay), static_cast<unsigned>(st.wHour),
-             static_cast<unsigned>(st.wMinute), static_cast<unsigned>(st.wSecond),
+    // Fallback: 100 ns file time + monotonic counter (finer resolution than
+    // the 1 s wall clock, keeps ids unique under rapid reconnect bursts).
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    const unsigned long long t =
+        (static_cast<unsigned long long>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+    char buf[96];
+    snprintf(buf, sizeof(buf), "%llu-%llu", t,
              static_cast<unsigned long long>(fallbackCounter.fetch_add(1)));
     return std::string(buf);
 }
@@ -48,27 +48,20 @@ std::string WebSocketServer::GenerateClientId() {
 // ============================================================================
 // Construction / Destruction
 // ============================================================================
-WebSocketServer::WebSocketServer(int port, ThreadSafeQueue& incomingQueue)
+WebSocketServer::WebSocketServer(int port)
     : m_port(port)
-    , m_incomingQueue(incomingQueue)
 {
     WSADATA wsaData;
-    WSAStartup(MAKEWORD(2, 2), &wsaData);
+    const int err = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    m_wsaInitialized = (err == 0);
+    if (!m_wsaInitialized)
+        std::cerr << "[DataBridge] WSAStartup failed with error " << err << std::endl;
 }
 
 WebSocketServer::~WebSocketServer() {
     Stop();
-    WSACleanup();
-}
-
-// ============================================================================
-// DrainIncomingQueue — called from EuroScope main thread (OnTimer)
-// ============================================================================
-void WebSocketServer::DrainIncomingQueue() {
-    if (!m_requestProcessor) return;
-    m_incomingQueue.Drain([this](std::string&& req) {
-        m_requestProcessor(std::move(req));
-    });
+    if (m_wsaInitialized)
+        WSACleanup();
 }
 
 // ============================================================================
@@ -79,9 +72,25 @@ bool WebSocketServer::Start() {
         return false;
 
     try {
-        m_server.init_asio();
+        if (!m_asioInitialized) {
+            // First run: the asio transport is UNINITIALIZED and holds a null
+            // io_service, so reset() must not be called yet — it would
+            // dereference the null pointer inside io_context::restart().
+            m_server.init_asio();
+            m_asioInitialized = true;
+        } else {
+            // Reuse after Stop(): the transport stays in READY state and
+            // init_asio() may not be called again ("asio::init_asio called
+            // from the wrong state"), but Stop() halted the io_service, so
+            // restart it before listen(). reset() is safe here: the
+            // io_service exists.
+            m_server.reset();
+        }
 
         m_server.set_reuse_addr(true);
+
+        // Reject oversized frames before they are buffered (memory guard).
+        m_server.set_max_message_size(MAX_INCOMING_MESSAGE_BYTES);
 
         // Keep error logging enabled for diagnostics
         m_server.clear_access_channels(websocketpp::log::alevel::all);
@@ -137,22 +146,6 @@ bool WebSocketServer::Start() {
         std::cout << "[DataBridge] ASIO run() returned" << std::endl;
     });
 
-    // Start the drain thread: periodically processes incoming client requests
-    // on its own schedule, independent of EuroScope's OnTimer callback.
-    // NOTE: the request processor runs here, so any EuroScope SDK access it
-    // performs happens off the EuroScope main thread.
-    m_drainRunning.store(true);
-    m_drainThread = std::thread([this]() {
-        while (m_drainRunning.load()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(DRAIN_INTERVAL_MS));
-            try {
-                DrainIncomingQueue();
-            } catch (...) {
-                std::cerr << "[DataBridge] Exception in drain thread" << std::endl;
-            }
-        }
-    });
-
     {
         std::ostringstream oss;
         oss << "[DataBridge] WebSocket server listening on ws://127.0.0.1:" << m_port;
@@ -165,11 +158,6 @@ bool WebSocketServer::Start() {
 // Stop
 // ============================================================================
 void WebSocketServer::Stop() {
-    // Stop the drain thread first so no request processing races shutdown.
-    m_drainRunning.store(false);
-    if (m_drainThread.joinable())
-        m_drainThread.join();
-
     if (m_running.load()) {
         m_running.store(false);
 
@@ -199,6 +187,13 @@ void WebSocketServer::Stop() {
     // the thread joinable, and ~std::thread would call std::terminate.
     if (m_ioThread.joinable())
         m_ioThread.join();
+
+    // Wait for all in-flight per-request workers before tearing down state:
+    // no worker may outlive the DLL unload.
+    {
+        std::unique_lock<std::mutex> lock(m_workersMutex);
+        m_workersCv.wait(lock, [this] { return m_activeWorkers.load() == 0; });
+    }
 
     {
         std::lock_guard<std::mutex> lock(m_clientsMutex);
@@ -283,7 +278,7 @@ void WebSocketServer::OnFail(ConnectionHdl hdl) {
 }
 
 // ============================================================================
-// OnMessage — parse JSON, inject clientId, push to queue
+// OnMessage — parse JSON, inject clientId, dispatch to a worker thread
 // ============================================================================
 void WebSocketServer::OnMessage(ConnectionHdl hdl, WsServer::message_ptr msg) {
     std::string clientId;
@@ -296,25 +291,68 @@ void WebSocketServer::OnMessage(ConnectionHdl hdl, WsServer::message_ptr msg) {
 
     const std::string& payload = msg->get_payload();
 
-    try {
-        json j = json::parse(payload);
-        // Reject non-object payloads: contains()/operator[] on a string, array
-        // or number would throw type_error(305).
-        if (!j.is_object() || !j.contains(json_key::TYPE)) {
-            return;
-        }
-
-        j[json_key::CLIENT_ID] = clientId;
-        m_incomingQueue.Push(j.dump());
-
-    } catch (const json::exception&) {
+    auto sendError = [this, &hdl](const char* message) {
         json err;
         err[json_key::TYPE] = msg_type::ERROR;
-        err[json_key::DATA][json_key::ERROR] = "Invalid JSON";
+        err[json_key::DATA][json_key::ERROR] = message;
         websocketpp::lib::error_code ec;
         m_server.send(hdl, err.dump(), websocketpp::frame::opcode::text, ec);
+    };
+
+    json j;
+    try {
+        j = json::parse(payload);
+    } catch (const json::exception&) {
+        sendError("Invalid JSON");
         return;
     }
+    // Reject non-object payloads: contains()/operator[] on a string, array
+    // or number would throw type_error(305).
+    if (!j.is_object()) {
+        sendError("Invalid request: expected a JSON object");
+        return;
+    }
+    if (!j.contains(json_key::TYPE) || !j[json_key::TYPE].is_string()) {
+        sendError("Missing 'type' field");
+        return;
+    }
+    const std::string type = j[json_key::TYPE].get<std::string>();
+
+    // Application-level heartbeat: optional, not enforced. Answer inline so
+    // the pong goes out instantly and no worker thread is spent.
+    if (type == msg_type::PING) {
+        json pong;
+        pong[json_key::TYPE] = msg_type::PONG;
+        if (j.contains(json_key::ID) && j[json_key::ID].is_string())
+            pong[json_key::ID] = j[json_key::ID];
+        websocketpp::lib::error_code ec;
+        m_server.send(hdl, pong.dump(), websocketpp::frame::opcode::text, ec);
+        return;
+    }
+
+    if (!m_requestProcessor) return;
+
+    // Cap concurrent workers so a request flood cannot exhaust threads.
+    if (m_activeWorkers.load() >= MAX_CONCURRENT_REQUESTS) {
+        sendError("Server busy: too many in-flight requests");
+        return;
+    }
+
+    // Hand the request to a dedicated worker thread: the ASIO IO thread
+    // stays free for I/O, and the response is sent as soon as the worker
+    // finishes.
+    j[json_key::CLIENT_ID] = clientId;
+    std::string requestJson = j.dump();
+    m_activeWorkers.fetch_add(1);
+    std::thread([this, requestJson = std::move(requestJson)]() mutable {
+        try {
+            m_requestProcessor(std::move(requestJson));
+        } catch (...) {
+            std::cerr << "[DataBridge] Exception while processing a request on a worker thread" << std::endl;
+        }
+        m_activeWorkers.fetch_sub(1);
+        m_workersCv.notify_all();
+    }).detach();
 }
 
 // ============================================================================
@@ -373,7 +411,7 @@ std::string WebSocketServer::HandleSubscriptionRequest(const std::string& reques
 
     auto makeResponse = [&id](bool success, const std::string& error, const std::set<std::string>& subs) {
         json resp;
-        resp[json_key::TYPE] = msg_type::RESPONSE;
+        resp[json_key::TYPE] = msg_type::SUBSCRIPTION;
         resp[json_key::ID] = id;
         resp[json_key::DATA][json_key::SUCCESS] = success;
         if (!error.empty())

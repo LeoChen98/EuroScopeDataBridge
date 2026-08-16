@@ -17,7 +17,9 @@ namespace edb {
 // HandleRequest — route an incoming WebSocket JSON request to the appropriate
 //                  ES query/setter function.
 //
-// Called from the EuroScope main thread (via OnTimer). Thread-safe.
+// Called on a dedicated per-request worker thread. The EuroScope SDK access
+// inside is guarded by the caller's locking strategy; concurrent requests
+// may run in parallel.
 //
 // Returns the JSON response string. Empty string means no response needed.
 // ============================================================================

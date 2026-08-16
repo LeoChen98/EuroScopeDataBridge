@@ -30,13 +30,16 @@ constexpr size_t MAX_CLIENT_SEND_QUEUE_BYTES = 32 * 1024 * 1024;  // 32 MB
 // to query the number of queued frames, so backpressure is byte-based only.
 constexpr size_t MAX_CLIENT_SEND_QUEUE_FRAMES = 8192;
 
-// Interval (ms) of the dedicated drain thread that processes incoming client
-// requests. Kept independent of EuroScope's OnTimer so requests are serviced
-// even when the EuroScope timer callback is stalled or absent.
-constexpr int DRAIN_INTERVAL_MS = 100;
+// Max inbound WebSocket message size accepted from a client (bytes). Larger
+// messages are rejected with the WebSocket "message_too_big" protocol error.
+constexpr size_t MAX_INCOMING_MESSAGE_BYTES = 1 * 1024 * 1024;  // 1 MB
 
 // --- Connection Limits ---
 constexpr int    MAX_CLIENTS             = 64;    // hard cap on concurrent WebSocket clients
+
+// Max concurrently running per-request worker threads. Requests beyond the
+// cap get an immediate "Server busy" error instead of spawning a thread.
+constexpr int    MAX_CONCURRENT_REQUESTS = 64;
 
 // ============================================================================
 // Message Type String Constants (Push)
@@ -120,6 +123,10 @@ namespace msg_type {
     constexpr auto SUBSCRIBE                     = "subscribe";
     constexpr auto UNSUBSCRIBE                   = "unsubscribe";
 
+    // Application-level heartbeat (optional, not enforced)
+    constexpr auto PING                          = "ping";
+    constexpr auto PONG                          = "pong";
+
     // Voice channel toggles
     constexpr auto TOGGLE_PRIMARY                = "toggle_primary";
     constexpr auto TOGGLE_ATIS                   = "toggle_atis";
@@ -130,6 +137,9 @@ namespace msg_type {
 
     // Response
     constexpr auto RESPONSE                      = "response";
+    // Response type used by subscribe/unsubscribe replies (distinct from the
+    // generic "response" so clients can tell subscription state apart).
+    constexpr auto SUBSCRIPTION                  = "subscription";
     constexpr auto ERROR                         = "error";
 
     // Internal routing tag

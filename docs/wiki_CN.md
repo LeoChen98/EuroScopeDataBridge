@@ -27,6 +27,7 @@
 - [订阅](#订阅)
   - [subscribe](#subscribe)
   - [unsubscribe](#unsubscribe)
+- [心跳（Ping / Pong）](#心跳ping--pong)
 - [请求（客户端 → 服务端）](#请求客户端--服务端)
   - [查询类](#查询类)
     - [get_flightplans](#get_flightplans)
@@ -109,11 +110,10 @@ EuroScope Data Bridge 是一个 EuroScope 插件 DLL，在本地 `ws://127.0.0.1
 通信模式：
 
 - **Push（订阅推送）**：EuroScope 回调事件自动序列化为 JSON。客户端需先用 `subscribe` 请求订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件对应的回调会被跳过（不做序列化与推送）。详见 [订阅](#订阅)。
-- **Request/Response（请求/响应）**：客户端发送带唯一 `id` 的请求，服务端在处理后返回带有相同 `id` 的响应。请求在 EuroScope 主线程（OnTimer）中处理，保证线程安全。
+- **Request/Response（请求/响应）**：客户端发送带唯一 `id` 的请求，服务端在处理后返回带有相同 `id` 的响应。每个请求在独立的异步工作线程中处理，WebSocket IO 线程不再阻塞；响应就绪后即时返回。
 
 定时行为：
 
-- 每 **10 ms** 广播线程将出队队列中的消息批量发送给客户端。
 - 每 **1 秒** 触发 `timer` 事件——但仅推送给订阅了 `timer` 的客户端。
 
 ---
@@ -173,6 +173,8 @@ Push 事件仅发送给订阅了其 `type` 的客户端（见 [订阅](#订阅)�
 | `data` | object | 事件数据 |
 
 ### 响应格式
+
+> **注意**：`subscribe` / `unsubscribe` 的响应使用 `"type": "subscription"` 而非下文示例中的 `"response"`（见 [订阅](#订阅)）。
 
 #### 成功
 
@@ -526,7 +528,7 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 
 ```json
 {
-  "type": "response",
+  "type": "subscription",
   "id": "sub-1",
   "data": {
     "success": true,
@@ -563,7 +565,7 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 
 ```json
 {
-  "type": "response",
+  "type": "subscription",
   "id": "sub-1",
   "data": {
     "success": false,
@@ -571,6 +573,27 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
   }
 }
 ```
+
+---
+
+## 心跳（Ping / Pong）
+
+支持但**不强制**应用层心跳：客户端可随时发送 `ping`，服务端立即回复 `pong`。可配合订阅的 `timer` 事件做连接健康检测。
+
+**请求示例：**
+
+```json
+{ "type": "ping", "id": "hb-1" }
+```
+
+**响应示例：**
+
+```json
+{ "type": "pong", "id": "hb-1" }
+```
+
+- `id` 为可选字段；`pong` 会原样回显 `ping` 中携带的 `id`（未携带则不返回）
+- 心跳在 IO 线程内联处理、立即响应，不占用并发请求配额
 
 ---
 
@@ -1867,6 +1890,7 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 | 错误消息 | 触发条件 |
 |----------|----------|
 | `Missing 'type' field` | 请求缺少 `type` 字段 |
+| `Invalid request: expected a JSON object` | 请求负载不是 JSON 对象 |
 | `Missing 'callsign' for setter operation` | 设置操作缺少 `data.callsign` |
 | `Flight plan not found: <callsign>` | 指定的飞行计划不存在 |
 | `Radar target not found: <callsign>` | 指定的雷达目标不存在 |
@@ -1875,8 +1899,11 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 | `Missing 'point' or 'time'` | `set_estimation` 缺少 `point` 或 `time` |
 | `Missing 'fp_callsign' or 'rt_callsign'` | `correlate` 缺少参数 |
 | `Missing or invalid 'index' (0-8 required)` | `set_flight_strip_annotation` 的 `index` 无效 |
+| `Missing or invalid 'value' for set_communication_type` | `set_communication_type` 的 `value` 为空或缺失 |
+| `Failed to set <field>` | 设置操作执行失败（目标无效或数值被拒绝） |
+| `Server busy: too many in-flight requests` | 并发请求达到上限（64） |
 | `Unknown message type: <type>` | 不支持的请求类型 |
-| `Invalid JSON` | 请求不是合法的 JSON（立即返回错误，不进入处理队列） |
+| `Invalid JSON` | 请求不是合法的 JSON（立即返回错误，不做处理） |
 
 ---
 
@@ -1885,5 +1912,8 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 | 常量 | 值 | 说明 |
 |------|-----|------|
 | WebSocket 端口 | `48521` | 仅监听 `127.0.0.1` |
-| 广播间隔 | `10 ms` | 出队队列批量广播间隔 |
+| 并发客户端上限 | `64` | 超过后新连接被拒绝 |
+| 入站消息大小上限 | `1 MB` | 超限帧以 `message_too_big` 协议错误拒绝 |
+| 并发请求上限 | `64` | 超出后立即返回 `Server busy` 错误 |
+| 每客户端发送队列上限 | `32 MB` | 背压保护，慢消费者丢弃帧 |
 | 定时器间隔 | `1 s` | `timer` 事件频率 |

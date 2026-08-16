@@ -21,15 +21,70 @@ jobs:
           fetch-depth: 0
 
       # 根据触发 ref 决定版本来源：
-      # - push release/<major>.<minor>.<patch> tag（路径 A）：只响应直接打在 main 上的 tag——
-      #   校验 tag 指向的 commit 是 origin/main 的祖先；通过后保留原行为：用 tag 名改写 src/Constants.h
-      #   并提交回 main，再构建发布。tag 不在 main 上（如打在 feature 分支）则跳过。
-      # - push main 分支（路径 B，如其他分支 merge 到 main）：读取 src/Constants.h 的 PLUGIN_VERSION，
-      #   与最近可达的 release tag 对比；版本有更新（或尚无任何 release tag）则给当前 commit 打上
-      #   release/<新版本> tag 并 push，由 tag push 触发的标准 release 流程完成构建与发布，本 run 结束。
+      # - push release/<major>.<minor>.<patch>[-prerelease] tag（路径 A）：只响应直接打在
+      #   main 上的 tag——校验 tag 指向的 commit 是 origin/main 的祖先；通过后保留原行为：
+      #   用 tag 名改写 src/Constants.h 并提交回 main，再构建发布。tag 不在 main 上
+      #   （如打在 feature 分支）则跳过。
+      # - push main 分支（路径 B，如其他分支 merge 到 main）：读取 src/Constants.h 的
+      #   PLUGIN_VERSION，与最近可达的 release tag 按 SemVer 优先级比较；版本有更新
+      #   （或尚无任何 release tag）则先把 vcpkg.json 的 version 同步到新版本并提交回
+      #   main，再给当前 commit 打上 release/<新版本> tag 并 push——这样 tag 指向的
+      #   源码版本元数据一致；tag push 触发的标准 release 流程（路径 A）完成构建与
+      #   发布，本 run 结束。
+      #
+      # 版本号支持 SemVer（含预发布段，如 1.1.1-beta.1）：PLUGIN_VERSION 保留完整
+      # 字符串（含 -prerelease），数字宏 PLUGIN_VERSION_MAJOR/MINOR/PATCH 只取数字核心
+      # （Win32 版本资源仅支持数字）。预发布版本发布时 draft 同时标记为 pre-release；
+      # vcpkg.json 的 version 同步更新（去掉 build 元数据，vcpkg 的 version-semver
+      # 不接受 +build）。
       - name: Bump plugin version from tag
         shell: pwsh
         run: |
+          $semverPattern = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$'
+
+          function Compare-SemVer {
+              param([string]$a, [string]$b)
+              $sa = $a -replace '\+.*$', ''
+              $sb = $b -replace '\+.*$', ''
+              $na = [regex]::Match($sa, '^(\d+)\.(\d+)\.(\d+)')
+              $nb = [regex]::Match($sb, '^(\d+)\.(\d+)\.(\d+)')
+              $va = [version]("$($na.Groups[1].Value).$($na.Groups[2].Value).$($na.Groups[3].Value)")
+              $vb = [version]("$($nb.Groups[1].Value).$($nb.Groups[2].Value).$($nb.Groups[3].Value)")
+              if ($va -lt $vb) { return -1 }
+              if ($va -gt $vb) { return 1 }
+              $pa = $sa -replace '^[^-]+', ''
+              $pb = $sb -replace '^[^-]+', ''
+              if ($pa -eq '' -and $pb -eq '') { return 0 }
+              if ($pa -eq '') { return 1 }      # 正式版 > 预发布版
+              if ($pb -eq '') { return -1 }
+              $ida = @($pa.Substring(1) -split '\.')
+              $idb = @($pb.Substring(1) -split '\.')
+              $n = [Math]::Min($ida.Count, $idb.Count)
+              for ($i = 0; $i -lt $n; $i++) {
+                  $ia = 0
+                  $ib = 0
+                  $aIsNum = [int]::TryParse($ida[$i], [ref]$ia)
+                  $bIsNum = [int]::TryParse($idb[$i], [ref]$ib)
+                  if ($aIsNum -and $bIsNum) {
+                      if ($ia -lt $ib) { return -1 }
+                      if ($ia -gt $ib) { return 1 }
+                      continue
+                  }
+                  if ($aIsNum) { return -1 }    # 数字标识 < 字母标识
+                  if ($bIsNum) { return 1 }
+                  $c = [string]::CompareOrdinal($ida[$i], $idb[$i])
+                  if ($c -ne 0) { return [Math]::Sign($c) }
+              }
+              if ($ida.Count -lt $idb.Count) { return -1 }
+              if ($ida.Count -gt $idb.Count) { return 1 }
+              return 0
+          }
+
+          # SemVer 优先级比较（SemVer 2.0 §11）：先比数字核心，再比预发布标识。
+          # 返回 -1（a 小于 b）、0（相等）、1（a 大于 b）。构建元数据（+build）不参与比较。
+          # 注意：注释不要放在 function 定义的正上方——Windows PowerShell 5.1 的
+          # 注释帮助解析器会误读 UTF-8 中文注释并破坏后续函数解析。
+
           $ref = "${{ github.ref }}"
           if ($ref -like 'refs/tags/release/*') {
             # ── 路径 A：tag push（只响应直接打在 main 上的 tag）──
@@ -42,13 +97,13 @@ jobs:
             }
             $tag = "${{ github.ref_name }}"
             $version = $tag -replace '^release/', '' -replace '^v', ''
-            $parts = $version.Split('.')
-            if ($parts.Count -lt 3) {
-              throw "Cannot parse version from tag '$tag' (expected release/<major>.<minor>.<patch>)"
+            if ($version -notmatch $semverPattern) {
+              throw "Cannot parse version from tag '$tag' (expected release/<semver>, e.g. release/1.1.1 or release/1.1.1-beta.1)"
             }
-            $major = $parts[0]
-            $minor = $parts[1]
-            $patch = $parts[2]
+            $numMatch = [regex]::Match($version, '^(\d+)\.(\d+)\.(\d+)')
+            $major = $numMatch.Groups[1].Value
+            $minor = $numMatch.Groups[2].Value
+            $patch = $numMatch.Groups[3].Value
             $path = 'src/Constants.h'
             $content = [System.IO.File]::ReadAllText($path)
             $content = [regex]::Replace($content, '(PLUGIN_VERSION\s+")[^"]*(")', "`${1}$version`${2}")
@@ -56,7 +111,25 @@ jobs:
             $content = [regex]::Replace($content, '(PLUGIN_VERSION_MINOR\s+)\d+', "`${1}$minor")
             $content = [regex]::Replace($content, '(PLUGIN_VERSION_PATCH\s+)\d+', "`${1}$patch")
             [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))
-            Write-Host "Bumped PLUGIN_VERSION to $version ($major.$minor.$patch) in $path"
+            Write-Host "Bumped PLUGIN_VERSION to $version (numeric core $major.$minor.$patch) in $path"
+
+            # vcpkg.json 的 version 同步更新。vcpkg 的 version-semver 不接受 build 元数据
+            # （+build），写入前将其剥离（SemVer 优先级本身忽略 build 元数据）。
+            $vcpkgPath = 'vcpkg.json'
+            $vcpkgVersion = $version -replace '\+.*$', ''
+            $vcpkgContent = [System.IO.File]::ReadAllText($vcpkgPath)
+            $vcpkgContent = [regex]::Replace($vcpkgContent, '("version"\s*:\s*")[^"]*(")', "`${1}$vcpkgVersion`${2}")
+            if (-not [regex]::IsMatch($vcpkgContent, '"version"\s*:\s*"' + [regex]::Escape($vcpkgVersion) + '"')) {
+              throw "Failed to rewrite the version field in $vcpkgPath"
+            }
+            [System.IO.File]::WriteAllText($vcpkgPath, $vcpkgContent, [System.Text.UTF8Encoding]::new($false))
+            Write-Host "Bumped vcpkg.json version to $vcpkgVersion"
+
+            # 预发布版本（数字核心后带 -prerelease 段）→ draft release 标记为 pre-release
+            $isPrerelease = ($version -match '^\d+\.\d+\.\d+-').ToString().ToLower()
+            "RELEASE_PRERELEASE=$isPrerelease" | Out-File -FilePath $env:GITHUB_ENV -Append
+            Write-Host "Prerelease flag: $isPrerelease"
+
             "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
             "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
           } else {
@@ -67,16 +140,14 @@ jobs:
               throw "Cannot read PLUGIN_VERSION from src/Constants.h"
             }
             $newVersion = $m.Groups[1].Value.Trim()
-            try {
-              $null = [version]$newVersion
-            } catch {
-              throw "Cannot parse version '$newVersion' from src/Constants.h (expected X.Y.Z)"
+            if ($newVersion -notmatch $semverPattern) {
+              throw "Cannot parse version '$newVersion' from src/Constants.h (expected SemVer, e.g. 1.1.1 or 1.1.1-beta.1)"
             }
-            # 与最近可达的 release tag 对比
+            # 与最近可达的 release tag 按 SemVer 优先级比较
             $prevTag = git describe --tags --abbrev=0 --match 'release/*' HEAD 2>$null
             if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrEmpty($prevTag)) {
               $prevVersion = $prevTag -replace '^release/', '' -replace '^v', ''
-              if ([version]$newVersion -le [version]$prevVersion) {
+              if ((Compare-SemVer $newVersion $prevVersion) -le 0) {
                 Write-Host "Version $newVersion is not newer than previous tag $prevTag; skipping"
                 "SKIP_RELEASE=true" | Out-File -FilePath $env:GITHUB_ENV -Append
                 exit 0
@@ -84,21 +155,49 @@ jobs:
             } else {
               Write-Host "No previous release tag found; treating $newVersion as first release"
             }
-            # 版本有更新：给当前 commit（更新所在的提交）打 release tag 并 push，
+            # 版本有更新：先把 vcpkg.json 的 version 同步到新版本并提交，使 tag 指向
+            # 的源码元数据一致。vcpkg 的 version-semver 不接受 build 元数据（+build），
+            # 写入前剥离。vcpkg.json 已是最新（有人提前同步）则跳过提交。
+            # 注意：此提交不带 [skip ci] —— tag 指向的 commit 若含跳过指令，会连带
+            # 跳过 tag push 触发的 release 流程（路径 A）。
+            $vcpkgVersion = $newVersion -replace '\+.*$', ''
+            $vcpkgPath = 'vcpkg.json'
+            $vcpkgContent = [System.IO.File]::ReadAllText($vcpkgPath)
+            $vcpkgContent = [regex]::Replace($vcpkgContent, '("version"\s*:\s*")[^"]*(")', "`${1}$vcpkgVersion`${2}")
+            if (-not [regex]::IsMatch($vcpkgContent, '"version"\s*:\s*"' + [regex]::Escape($vcpkgVersion) + '"')) {
+              throw "Failed to rewrite the version field in $vcpkgPath"
+            }
+            [System.IO.File]::WriteAllText($vcpkgPath, $vcpkgContent, [System.Text.UTF8Encoding]::new($false))
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git checkout -B ci/version-commit
+            git add vcpkg.json
+            git diff --cached --quiet
+            if ($LASTEXITCODE -ne 0) {
+              git commit -m "chore: bump vcpkg manifest version to $vcpkgVersion"
+              Write-Host "Committed vcpkg.json version sync to $vcpkgVersion"
+            } else {
+              Write-Host "vcpkg.json already at $vcpkgVersion, nothing to commit"
+            }
+            # 给当前 commit（已含版本元数据同步）打 release tag 并 push，
             # tag push 会触发标准 release 流程（路径 A），本 run 结束。
             $newTag = "release/$newVersion"
             git tag $newTag HEAD
             if ($LASTEXITCODE -ne 0) { throw "Failed to create tag $newTag" }
             git push origin $newTag
             if ($LASTEXITCODE -ne 0) { throw "Failed to push tag $newTag" }
+            # 最后把 vcpkg.json 同步提交推回 main。此时 tag 已存在，由该 push 触发的
+            # 路径 B 运行会发现版本不新于 tag 而跳过，不会重复发布。
+            git push origin HEAD:main
+            if ($LASTEXITCODE -ne 0) { throw "Failed to push version sync commit to main" }
             Write-Host "Created and pushed tag $newTag for version $newVersion"
             "SKIP_RELEASE=true" | Out-File -FilePath $env:GITHUB_ENV -Append
             exit 0
           }
 
       # 将上面的版本号修改持久化提交到 main 分支（基于最新 origin/main，覆盖为 release 版本号），
-      # 保证 main 上的 src/Constants.h 与 release tag 保持一致。commit message 带 [skip ci]
-      # 以避免触发 build-main.yml 的重复构建。
+      # 保证 main 上的 src/Constants.h 与 vcpkg.json 跟 release tag 保持一致。commit message 带
+      # [skip ci] 以避免触发 build-main.yml 的重复构建。
       - name: Commit version bump to main
         if: env.SKIP_RELEASE != 'true'
         shell: pwsh
@@ -108,11 +207,13 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           # 备份 Bump 步骤修改后的文件，再切到最新 main 应用
           Copy-Item src/Constants.h "$env:RUNNER_TEMP\Constants.h.bumped"
+          Copy-Item vcpkg.json "$env:RUNNER_TEMP\vcpkg.json.bumped"
           git fetch origin main
-          git checkout -- src/Constants.h
+          git checkout -- src/Constants.h vcpkg.json
           git checkout -B ci/version-commit origin/main
           Copy-Item "$env:RUNNER_TEMP\Constants.h.bumped" src/Constants.h
-          git add src/Constants.h
+          Copy-Item "$env:RUNNER_TEMP\vcpkg.json.bumped" vcpkg.json
+          git add src/Constants.h vcpkg.json
           git diff --cached --quiet
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Version unchanged on main, nothing to commit"
@@ -124,7 +225,7 @@ jobs:
           # 恢复工作区到触发 commit，并应用已 bump 的版本文件，
           # 确保后续 Build 基于 tag 内容（而非 origin/main 可能更新的代码）构建。
           git checkout --detach "${{ github.sha }}"
-          git checkout ci/version-commit -- src/Constants.h
+          git checkout ci/version-commit -- src/Constants.h vcpkg.json
           Write-Host "Restored working tree to $env:RELEASE_TAG with bumped version"
 
       - name: Setup MSBuild
@@ -136,6 +237,13 @@ jobs:
         shell: pwsh
         run: |
           git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
+          # builtin-baseline 指向历史 commit，浅克隆（--depth 1）不含它：显式 fetch 该
+          # commit，否则 vcpkg 读取 versions/baseline.json 时 git show 会失败。
+          $baseline = (Get-Content vcpkg.json | ConvertFrom-Json).'builtin-baseline'
+          if ($baseline) {
+            git -C "$env:RUNNER_TEMP\vcpkg" fetch --depth 1 origin $baseline
+            if ($LASTEXITCODE -ne 0) { throw "Failed to fetch vcpkg baseline $baseline" }
+          }
           & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
           # 按 vcpkg.json 安装 asio/nlohmann-json 到仓库根目录 vcpkg_installed（vcxproj 的 include 路径依赖它）
           & "$env:RUNNER_TEMP\vcpkg\vcpkg.exe" install --triplet x86-windows
@@ -151,6 +259,9 @@ jobs:
           tag: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_VERSION }}
           draft: true
+          # 预发布 SemVer（如 1.1.1-beta.1）的 draft 同时标记为 pre-release，
+          # 这样 /releases/latest 不会选中它（网站版本徽章取 latest 正式版）。
+          prerelease: ${{ env.RELEASE_PRERELEASE == 'true' }}
           generateReleaseNotes: true
           # 只附加主工程输出（dll/lib/exp/pdb），排除 obj 中间目录；不包含测试工程产物
           artifacts: 'Release/*,!Release/obj'

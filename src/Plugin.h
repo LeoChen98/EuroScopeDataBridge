@@ -10,7 +10,6 @@
 #include <windows.h>
 #include "EuroScopePlugIn.h"
 #include "Constants.h"
-#include "ThreadSafeQueue.h"
 #include "WebSocketServer.h"
 
 #include <memory>
@@ -73,9 +72,6 @@ public:
 
     void OnTimer(int Counter) ;
 
-    // Accessors
-    edb::ThreadSafeQueue& GetIncomingQueue() { return m_incomingQueue; }
-
 private:
     // Helper: push a JSON string to the outgoing queue, wrapped with a type
     void PushEvent(const char* type, const std::string& dataJson);
@@ -85,6 +81,5 @@ private:
     void LogCallbackError(const char* callbackName);
 
 
-    edb::ThreadSafeQueue m_incomingQueue;
     std::unique_ptr<edb::WebSocketServer> m_wsServer;
 };

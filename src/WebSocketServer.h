@@ -31,19 +31,15 @@
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
 
-#include "ThreadSafeQueue.h"
-
 namespace edb {
 
 // ============================================================================
 // WebSocketServer — WebSocket++ based server for local EuroScope
 //
 // Architecture:
-//   1 ASIO io_service thread (async I/O for all connections)
-//   + EuroScope main thread: OnTimer drains the incoming queue and executes
-//     the request processor. All EuroScope SDK access therefore happens on
-//     the main thread inside a plugin callback context (the only context
-//     where SDK calls are safe).
+//   1 ASIO io_service thread: async I/O for all connections. Incoming
+//     requests are processed inline in the message handler and responded to
+//     immediately — no interval-triggered queue, no additional threads.
 //
 // Messages are routed per-client:
 //   - push events broadcast to all handshake-complete clients
@@ -55,8 +51,7 @@ public:
     using WsServer = websocketpp::server<websocketpp::config::asio>;
     using ConnectionHdl = websocketpp::connection_hdl;
 
-    // Constructor: port + shared incoming queue (EuroScope thread drains it).
-    WebSocketServer(int port, ThreadSafeQueue& incomingQueue);
+    explicit WebSocketServer(int port);
     ~WebSocketServer();
 
     // Non-copyable, non-movable
@@ -103,17 +98,13 @@ public:
         m_errorCallback = std::move(cb);
     }
 
-    // Set a callback for processing incoming requests.
-    // Called on the EuroScope main thread (via DrainIncomingQueue / OnTimer).
-    // The callback receives the raw JSON request string (with client_id already injected).
+    // Set a callback for processing incoming requests. Invoked inline from
+    // the ASIO IO thread as soon as a message arrives, so the response is
+    // sent immediately. The callback receives the raw JSON request string
+    // (with client_id already injected).
     void SetRequestProcessor(std::function<void(std::string&&)> processor) {
         m_requestProcessor = std::move(processor);
     }
-
-    // Drain the raw incoming queue and execute the request processor on the
-    // calling thread. Call from the EuroScope main thread (OnTimer); the
-    // EuroScope SDK access inside the processor must stay on that thread.
-    void DrainIncomingQueue();
 
 private:
     // --- Per-client session ---
@@ -149,7 +140,6 @@ private:
     }
 
     int m_port;
-    ThreadSafeQueue& m_incomingQueue;
 
     WsServer m_server;
     std::thread m_ioThread;

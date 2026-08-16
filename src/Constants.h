@@ -30,17 +30,9 @@ constexpr size_t MAX_CLIENT_SEND_QUEUE_BYTES = 32 * 1024 * 1024;  // 32 MB
 // to query the number of queued frames, so backpressure is byte-based only.
 constexpr size_t MAX_CLIENT_SEND_QUEUE_FRAMES = 8192;
 
-// Cadence of the EuroScope OnTimer callback (main thread); incoming client
-// requests are drained and processed on that beat.
-constexpr int TIMER_INTERVAL_MS = 1000;
-
 // Max inbound WebSocket message size accepted from a client (bytes). Larger
 // messages are rejected with the WebSocket "message_too_big" protocol error.
 constexpr size_t MAX_INCOMING_MESSAGE_BYTES = 1 * 1024 * 1024;  // 1 MB
-
-// Max pending inbound requests buffered between the WebSocket layer and the
-// EuroScope main thread. When full, the oldest request is dropped.
-constexpr size_t MAX_INCOMING_QUEUE_SIZE = 1024;
 
 // --- Connection Limits ---
 constexpr int    MAX_CLIENTS             = 64;    // hard cap on concurrent WebSocket clients

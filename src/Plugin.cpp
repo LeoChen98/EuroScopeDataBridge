@@ -24,17 +24,16 @@ DataBridgePlugin::DataBridgePlugin()
               PLUGIN_AUTHOR,
               PLUGIN_COPYRIGHT)
 {
-    m_wsServer = std::make_unique<WebSocketServer>(WS_PORT, m_incomingQueue);
+    m_wsServer = std::make_unique<WebSocketServer>(WS_PORT);
 
     // Forward WebSocketServer errors to EuroScope's message area
     m_wsServer->SetErrorCallback([this](const std::string& msg) {
         DisplayUserMessage("message", "DataBridge", msg.c_str(), true, false, false, false, false);
     });
 
-    // Register request processor: executed on the EuroScope main thread —
-    // OnTimer drains the incoming queue through DrainIncomingQueue, so all
-    // EuroScope SDK access happens inside a plugin callback context. Extracts
-    // client_id (injected by OnMessage), routes subscribe/unsubscribe to the
+    // Register request processor: executed on the server's dedicated drain
+    // thread, independent of EuroScope's OnTimer callback. Extracts client_id
+    // (injected by OnMessage), routes subscribe/unsubscribe to the
     // subscription manager, otherwise calls HandleRequest and routes the
     // response.
     m_wsServer->SetRequestProcessor([this](std::string&& requestStr) {
@@ -328,17 +327,15 @@ void DataBridgePlugin::OnAirportRunwayActivityChanged(void)
 }
 
 // ============================================================================
-// OnTimer — Process incoming requests + send periodic events
+// OnTimer — Send periodic events
 // ============================================================================
 
 void DataBridgePlugin::OnTimer(int Counter)
 {
     try {
-    // Incoming WebSocket requests are drained and processed here, on the
-    // EuroScope main thread inside the OnTimer callback — the only context
-    // where EuroScope SDK access is safe. Worst-case request latency is one
-    // timer tick (1 s).
-    m_wsServer->DrainIncomingQueue();
+    // Incoming WebSocket requests are processed inline by the server's
+    // message handler (ASIO IO thread) and responded to immediately — not
+    // here, and not via an interval-triggered queue.
 
     // Send timer event every second (only to subscribers)
     if (m_wsServer->HasSubscribers(msg_type::TIMER))

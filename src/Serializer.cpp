@@ -10,6 +10,27 @@ using namespace EuroScopePlugIn;
 
 namespace edb {
 
+// All dump() calls below use error_handler_t::replace: SDK strings may carry
+// bytes that are not valid UTF-8, and the strict handler would throw
+// type_error(316). CharField maps the SDK char sentinels (0 / 0xFF) to empty
+// strings for the same reason.
+
+namespace {
+
+// The EuroScope SDK uses char sentinels (0 or 0xFF / -1) for "no data" on
+// several fields. A raw sentinel byte would enter the JSON string as an
+// invalid UTF-8 byte and nlohmann's strict dump() would throw
+// type_error(316), so map sentinels to an empty string and keep valid
+// single characters as-is.
+std::string CharField(char c)
+{
+    if (c == '\0' || c == '\xFF')
+        return std::string();
+    return std::string(1, c);
+}
+
+} // namespace
+
 // ============================================================================
 // FlightPlanPositionPredictions
 // ============================================================================
@@ -35,7 +56,7 @@ std::string SerializePositionPredictionsToJson(CFlightPlanPositionPredictions& p
     }
     j["points"] = std::move(points);
 
-    return j.dump();
+return j.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 // ============================================================================
@@ -49,7 +70,7 @@ std::string SerializeRadarTargetPositionDataToJson(CRadarTargetPositionData& pos
     if (!pos.IsValid())
     {
         j["valid"] = false;
-        return j.dump();
+    return j.dump(-1, ' ', false, json::error_handler_t::replace);
     }
 
     j["valid"] = true;
@@ -70,7 +91,7 @@ std::string SerializeRadarTargetPositionDataToJson(CRadarTargetPositionData& pos
     j["transponder_c"] = pos.GetTransponderC();
     j["transponder_i"] = pos.GetTransponderI();
 
-    return j.dump();
+return j.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 // ============================================================================
@@ -89,18 +110,18 @@ std::string SerializeFlightPlanDataToJson(CFlightPlanData& fpd)
 
     // Aircraft characteristics
     char wtc = fpd.GetAircraftWtc();
-    j["aircraft_wtc"] = std::string(1, wtc);
+    j["aircraft_wtc"] = CharField(wtc);
 
     char acType = fpd.GetAircraftType();
-    j["aircraft_type"] = std::string(1, acType);
+    j["aircraft_type"] = CharField(acType);
 
     j["engine_number"] = fpd.GetEngineNumber();
 
     char engType = fpd.GetEngineType();
-    j["engine_type"] = std::string(1, engType);
+    j["engine_type"] = CharField(engType);
 
     char cap = fpd.GetCapibilities();
-    j["capabilities"] = std::string(1, cap);
+    j["capabilities"] = CharField(cap);
 
     j["is_rvsm"] = fpd.IsRvsm();
     j["manufacturer_type"] = SafeStr(fpd.GetManufacturerType());
@@ -115,7 +136,7 @@ std::string SerializeFlightPlanDataToJson(CFlightPlanData& fpd)
     j["remarks"]          = SafeStr(fpd.GetRemarks());
 
     char commType = fpd.GetCommunicationType();
-    j["communication_type"] = std::string(1, commType);
+    j["communication_type"] = CharField(commType);
 
     j["route"]            = SafeStr(fpd.GetRoute());
     j["sid_name"]         = SafeStr(fpd.GetSidName());
@@ -131,7 +152,7 @@ std::string SerializeFlightPlanDataToJson(CFlightPlanData& fpd)
     j["fuel_hours"]               = SafeStr(fpd.GetFuelHours());
     j["fuel_minutes"]             = SafeStr(fpd.GetFuelMinutes());
 
-    return j.dump();
+return j.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 // ============================================================================
@@ -147,7 +168,7 @@ std::string SerializeControllerAssignedDataToJson(CFlightPlanControllerAssignedD
     j["cleared_altitude"]    = cad.GetClearedAltitude();
 
     char commType = cad.GetCommunicationType();
-    j["communication_type"]  = std::string(1, commType);
+    j["communication_type"]  = CharField(commType);
 
     j["scratchpad"]          = SafeStr(cad.GetScratchPadString());
     j["assigned_speed"]      = cad.GetAssignedSpeed();
@@ -165,7 +186,7 @@ std::string SerializeControllerAssignedDataToJson(CFlightPlanControllerAssignedD
     }
     j["flight_strip_annotations"] = std::move(annotations);
 
-    return j.dump();
+return j.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 // ============================================================================
@@ -201,7 +222,7 @@ std::string SerializeExtractedRouteToJson(CFlightPlanExtractedRoute& route)
     }
     j["points"] = std::move(points);
 
-    return j.dump();
+return j.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 // ============================================================================
@@ -215,7 +236,7 @@ std::string SerializeFlightPlanToJson(CFlightPlan& fp)
     if (!fp.IsValid())
     {
         j["valid"] = false;
-        return j.dump();
+    return j.dump(-1, ' ', false, json::error_handler_t::replace);
     }
 
     j["valid"] = true;
@@ -321,7 +342,7 @@ std::string SerializeFlightPlanToJson(CFlightPlan& fp)
         }
     }
 
-    return j.dump();
+return j.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 // ============================================================================
@@ -335,7 +356,7 @@ std::string SerializeRadarTargetToJson(CRadarTarget& rt)
     if (!rt.IsValid())
     {
         j["valid"] = false;
-        return j.dump();
+    return j.dump(-1, ' ', false, json::error_handler_t::replace);
     }
 
     j["valid"] = true;
@@ -381,7 +402,7 @@ std::string SerializeRadarTargetToJson(CRadarTarget& rt)
         j["position_history"] = std::move(history);
     }
 
-    return j.dump();
+return j.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 // ============================================================================
@@ -395,7 +416,7 @@ std::string SerializeControllerToJson(CController& ctr)
     if (!ctr.IsValid())
     {
         j["valid"] = false;
-        return j.dump();
+    return j.dump(-1, ' ', false, json::error_handler_t::replace);
     }
 
     j["valid"] = true;
@@ -417,7 +438,7 @@ std::string SerializeControllerToJson(CController& ctr)
     j["is_breaking"]  = ctr.IsBreaking();
     j["ongoing_able"] = ctr.IsOngoingAble();
 
-    return j.dump();
+return j.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 // ============================================================================
@@ -431,7 +452,7 @@ std::string SerializeSectorElementToJson(CSectorElement& se)
     if (!se.IsValid())
     {
         j["valid"] = false;
-        return j.dump();
+    return j.dump(-1, ' ', false, json::error_handler_t::replace);
     }
 
     j["valid"] = true;
@@ -484,7 +505,7 @@ std::string SerializeSectorElementToJson(CSectorElement& se)
     j["active_arrival"]   = se.IsElementActive(false);
     j["active_departure"] = se.IsElementActive(true);
 
-    return j.dump();
+return j.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 // ============================================================================
@@ -498,7 +519,7 @@ std::string SerializeVoiceChannelToJson(CGrountToAirChannel& ch)
     if (!ch.IsValid())
     {
         j["valid"] = false;
-        return j.dump();
+    return j.dump(-1, ' ', false, json::error_handler_t::replace);
     }
 
     j["valid"] = true;
@@ -514,7 +535,7 @@ std::string SerializeVoiceChannelToJson(CGrountToAirChannel& ch)
     j["is_voice_transmit_on"] = ch.GetIsVoiceTransmitOn();
     j["is_voice_connected"]   = ch.GetIsVoiceConnected();
 
-    return j.dump();
+return j.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 } // namespace edb

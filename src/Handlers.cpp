@@ -66,7 +66,9 @@ std::string MakeResponse(const std::string& id, bool success, const std::string&
     }
     if (!error.empty())
         resp[json_key::DATA][json_key::ERROR] = error;
-    return resp.dump();
+    // replace invalid UTF-8: client-provided strings (e.g. callsign echoes)
+    // may carry bytes the strict dump would reject with type_error(316).
+    return resp.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 std::string MakeSuccess(const std::string& id, const std::string& resultJson = "")

@@ -68,7 +68,7 @@
     <div class="diagram">
       <div class="diagram-node">
         <h3>EuroScope（主线程）</h3>
-        <p>DataBridgePlugin<br>ES 回调 · OnTimer → Drain<br>FullSnapshot</p>
+        <p>DataBridgePlugin<br>ES 回调 · 每请求工作线程<br>FullSnapshot</p>
       </div>
       <div class="diagram-link">
         <span class="wire">ws://127.0.0.1:48521</span>
@@ -81,7 +81,7 @@
     </div>
     <ul class="mode-list">
       <li><strong>Push（订阅推送）</strong> — EuroScope 回调事件自动序列化为 JSON。客户端需先 <code>subscribe</code> 订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件的回调会被完全跳过（零序列化、零推送）。</li>
-      <li><strong>Pull / Request（拉 / 请求模式）</strong> — 客户端发送 JSON 请求（如 <code>get_flightplans</code>、<code>get_full_snapshot</code>），请求在 EuroScope 主线程上处理，结果通过 WebSocket 返回。</li>
+      <li><strong>Pull / Request（拉 / 请求模式）</strong> — 客户端发送 JSON 请求（如 <code>get_flightplans</code>、<code>get_full_snapshot</code>），每个请求在独立的异步工作线程中处理，响应就绪后即时通过 WebSocket 返回。</li>
       <li><strong>定时事件</strong> — <code>timer</code> 事件（含 tick 计数器）每秒触发一次，同样仅在客户端订阅后推送，便于定时轮询或心跳检测。</li>
     </ul>
   </section>

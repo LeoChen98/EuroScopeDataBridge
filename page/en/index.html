@@ -68,7 +68,7 @@
     <div class="diagram">
       <div class="diagram-node">
         <h3>EuroScope (main thread)</h3>
-        <p>DataBridgePlugin<br>ES Callbacks · OnTimer → Drain<br>FullSnapshot</p>
+        <p>DataBridgePlugin<br>ES Callbacks · Per-request workers<br>FullSnapshot</p>
       </div>
       <div class="diagram-link">
         <span class="wire">ws://127.0.0.1:48521</span>
@@ -81,7 +81,7 @@
     </div>
     <ul class="mode-list">
       <li><strong>Push mode (subscription-based)</strong> — EuroScope callback events are automatically serialized to JSON. A client must first <code>subscribe</code> to the event types it is interested in; only subscribed clients receive the matching events. When no client has subscribed to an event type, its callback is skipped entirely (no serialization, no push).</li>
-      <li><strong>Pull / Request mode</strong> — clients send JSON requests (e.g. <code>get_flightplans</code>, <code>get_full_snapshot</code>), which are processed on the EuroScope main thread, with results returned over WebSocket.</li>
+      <li><strong>Pull / Request mode</strong> — clients send JSON requests (e.g. <code>get_flightplans</code>, <code>get_full_snapshot</code>); each request runs on its own async worker thread and the result is returned over WebSocket as soon as it is ready.</li>
       <li><strong>Timed events</strong> — a <code>timer</code> event (with a tick counter) fires once per second, likewise only pushed to clients that subscribed to it — handy for polling or heartbeat detection.</li>
     </ul>
   </section>

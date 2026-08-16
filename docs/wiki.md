@@ -174,8 +174,6 @@ Push events are only sent to clients that subscribed to their `type` (see [Subsc
 
 ### Response format
 
-> **Note**: `subscribe` / `unsubscribe` responses use `"type": "subscription"` instead of the `"response"` shown below (see [Subscription](#subscription)).
-
 #### Success
 
 ```json
@@ -528,7 +526,7 @@ Adds the given event types to the client's subscription set. Repeatable — call
 
 ```json
 {
-  "type": "subscription",
+  "type": "response",
   "id": "sub-1",
   "data": {
     "success": true,
@@ -565,7 +563,7 @@ The response has the same shape as `subscribe` (`success` + current `events`).
 
 ```json
 {
-  "type": "subscription",
+  "type": "response",
   "id": "sub-1",
   "data": {
     "success": false,

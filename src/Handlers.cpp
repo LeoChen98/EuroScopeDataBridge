@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <utility>
+#include <iostream>
 
 using json = nlohmann::json;
 using namespace EuroScopePlugIn;
@@ -32,6 +33,20 @@ std::pair<bool, json> SafeParse(const std::string& s)
     }
 }
 
+// Serialize an ES object and parse the result. Catches exceptions thrown by
+// the serializer itself (e.g. nlohmann type_error on unusual flight plans)
+// so a single bad record is skipped instead of aborting the whole batch.
+template<typename ES>
+std::pair<bool, json> SerializeSafe(ES& obj, std::string (*serializer)(ES&))
+{
+    try {
+        return SafeParse(serializer(obj));
+    } catch (...) {
+        std::cerr << "[DataBridge] Serialization failed; skipping record" << std::endl;
+        return {false, json()};
+    }
+}
+
 std::string MakeResponse(const std::string& id, bool success, const std::string& resultJson, const std::string& error)
 {
     json resp;
@@ -51,7 +66,9 @@ std::string MakeResponse(const std::string& id, bool success, const std::string&
     }
     if (!error.empty())
         resp[json_key::DATA][json_key::ERROR] = error;
-    return resp.dump();
+    // replace invalid UTF-8: client-provided strings (e.g. callsign echoes)
+    // may carry bytes the strict dump would reject with type_error(316).
+    return resp.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 std::string MakeSuccess(const std::string& id, const std::string& resultJson = "")
@@ -140,7 +157,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         {
             CFlightPlan fp = plugin.FlightPlanSelect(callsign.c_str());
             if (fp.IsValid()) {
-                auto parsed = SafeParse(SerializeFlightPlanToJson(fp));
+                auto parsed = SerializeSafe(fp, &SerializeFlightPlanToJson);
                 if (parsed.first)
                     result.push_back(std::move(parsed.second));
             }
@@ -150,7 +167,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
             CFlightPlan fp = plugin.FlightPlanSelectFirst();
             while (fp.IsValid())
             {
-                auto parsed = SafeParse(SerializeFlightPlanToJson(fp));
+                printf(fp.GetCallsign());
+                auto parsed = SerializeSafe(fp, &SerializeFlightPlanToJson);
                 if (parsed.first)
                     result.push_back(std::move(parsed.second));
                 fp = plugin.FlightPlanSelectNext(fp);
@@ -166,7 +184,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         {
             CRadarTarget rt = plugin.RadarTargetSelect(callsign.c_str());
             if (rt.IsValid()) {
-                auto parsed = SafeParse(SerializeRadarTargetToJson(rt));
+                auto parsed = SerializeSafe(rt, &SerializeRadarTargetToJson);
                 if (parsed.first)
                     result.push_back(std::move(parsed.second));
             }
@@ -176,7 +194,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
             CRadarTarget rt = plugin.RadarTargetSelectFirst();
             while (rt.IsValid())
             {
-                auto parsed = SafeParse(SerializeRadarTargetToJson(rt));
+                auto parsed = SerializeSafe(rt, &SerializeRadarTargetToJson);
                 if (parsed.first)
                     result.push_back(std::move(parsed.second));
                 rt = plugin.RadarTargetSelectNext(rt);
@@ -191,7 +209,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
 
         CController myself = plugin.ControllerMyself();
         if (myself.IsValid()) {
-            auto parsed = SafeParse(SerializeControllerToJson(myself));
+            auto parsed = SerializeSafe(myself, &SerializeControllerToJson);
             if (parsed.first)
                 result.push_back(std::move(parsed.second));
         }
@@ -199,7 +217,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         CController ctr = plugin.ControllerSelectFirst();
         while (ctr.IsValid())
         {
-            auto parsed = SafeParse(SerializeControllerToJson(ctr));
+            auto parsed = SerializeSafe(ctr, &SerializeControllerToJson);
             if (parsed.first)
                 result.push_back(std::move(parsed.second));
             ctr = plugin.ControllerSelectNext(ctr);
@@ -216,7 +234,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         CSectorElement se = plugin.SectorFileElementSelectFirst(filterType);
         while (se.IsValid())
         {
-            auto parsed = SafeParse(SerializeSectorElementToJson(se));
+            auto parsed = SerializeSafe(se, &SerializeSectorElementToJson);
             if (parsed.first)
                 result.push_back(std::move(parsed.second));
             se = plugin.SectorFileElementSelectNext(se, filterType);
@@ -230,7 +248,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         CGrountToAirChannel ch = plugin.GroundToArChannelSelectFirst();
         while (ch.IsValid())
         {
-            auto parsed = SafeParse(SerializeVoiceChannelToJson(ch));
+            auto parsed = SerializeSafe(ch, &SerializeVoiceChannelToJson);
             if (parsed.first)
                 result.push_back(std::move(parsed.second));
             ch = plugin.GroundToArChannelSelectNext(ch);
@@ -265,8 +283,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         CFlightPlan fp = plugin.FlightPlanSelectFirst();
         while (fp.IsValid())
         {
-            std::string fpJson = SerializeFlightPlanToJson(fp);
-            auto parsed = SafeParse(fpJson);
+            auto parsed = SerializeSafe(fp, &SerializeFlightPlanToJson);
             if (parsed.first)
                 result["flightplans"].push_back(std::move(parsed.second));
             fp = plugin.FlightPlanSelectNext(fp);
@@ -276,8 +293,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         CRadarTarget rt = plugin.RadarTargetSelectFirst();
         while (rt.IsValid())
         {
-            std::string rtJson = SerializeRadarTargetToJson(rt);
-            auto parsed = SafeParse(rtJson);
+            auto parsed = SerializeSafe(rt, &SerializeRadarTargetToJson);
             if (parsed.first)
                 result["radar_targets"].push_back(std::move(parsed.second));
             rt = plugin.RadarTargetSelectNext(rt);
@@ -287,8 +303,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         CController ctr = plugin.ControllerSelectFirst();
         while (ctr.IsValid())
         {
-            std::string ctrJson = SerializeControllerToJson(ctr);
-            auto parsed = SafeParse(ctrJson);
+            auto parsed = SerializeSafe(ctr, &SerializeControllerToJson);
             if (parsed.first)
                 result["controllers"].push_back(std::move(parsed.second));
             ctr = plugin.ControllerSelectNext(ctr);
@@ -298,8 +313,7 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         CController myself = plugin.ControllerMyself();
         if (myself.IsValid())
         {
-            std::string myJson = SerializeControllerToJson(myself);
-            auto parsed = SafeParse(myJson);
+            auto parsed = SerializeSafe(myself, &SerializeControllerToJson);
             if (parsed.first)
                 result["controllers"].push_back(std::move(parsed.second));
         }

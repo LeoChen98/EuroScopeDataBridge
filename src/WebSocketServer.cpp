@@ -411,7 +411,7 @@ std::string WebSocketServer::HandleSubscriptionRequest(const std::string& reques
 
     auto makeResponse = [&id](bool success, const std::string& error, const std::set<std::string>& subs) {
         json resp;
-        resp[json_key::TYPE] = msg_type::SUBSCRIPTION;
+        resp[json_key::TYPE] = msg_type::RESPONSE;
         resp[json_key::ID] = id;
         resp[json_key::DATA][json_key::SUCCESS] = success;
         if (!error.empty())
@@ -421,7 +421,9 @@ std::string WebSocketServer::HandleSubscriptionRequest(const std::string& reques
             for (const auto& e : subs)
                 resp[json_key::DATA][json_key::EVENTS].push_back(e);
         }
-        return resp.dump();
+        // replace invalid UTF-8: subscription events come from the client
+        // and may contain bytes the strict dump would reject.
+        return resp.dump(-1, ' ', false, json::error_handler_t::replace);
     };
 
     // Collect requested event types

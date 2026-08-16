@@ -174,8 +174,6 @@ Push 事件仅发送给订阅了其 `type` 的客户端（见 [订阅](#订阅)�
 
 ### 响应格式
 
-> **注意**：`subscribe` / `unsubscribe` 的响应使用 `"type": "subscription"` 而非下文示例中的 `"response"`（见 [订阅](#订阅)）。
-
 #### 成功
 
 ```json
@@ -528,7 +526,7 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 
 ```json
 {
-  "type": "subscription",
+  "type": "response",
   "id": "sub-1",
   "data": {
     "success": true,
@@ -565,7 +563,7 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 
 ```json
 {
-  "type": "subscription",
+  "type": "response",
   "id": "sub-1",
   "data": {
     "success": false,

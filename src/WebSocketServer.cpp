@@ -182,9 +182,20 @@ bool WebSocketServer::Start() {
         return false;
 
     try {
-        // Re-arm the ASIO io_service so Stop() → Start() reuse works.
-        m_server.reset();
-        m_server.init_asio();
+        if (!m_asioInitialized) {
+            // First run: the asio transport is UNINITIALIZED and holds a null
+            // io_service, so reset() must not be called yet — it would
+            // dereference the null pointer inside io_context::restart().
+            m_server.init_asio();
+            m_asioInitialized = true;
+        } else {
+            // Reuse after Stop(): the transport stays in READY state and
+            // init_asio() may not be called again ("asio::init_asio called
+            // from the wrong state"), but Stop() halted the io_service, so
+            // restart it before listen(). reset() is safe here: the
+            // io_service exists.
+            m_server.reset();
+        }
 
         m_server.set_reuse_addr(true);
 

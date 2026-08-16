@@ -179,6 +179,11 @@ private:
     std::atomic<bool> m_running;
     std::atomic<bool> m_drainRunning{false};
     bool m_wsaInitialized = false;
+    // True once init_asio() has run. The asio transport may only be
+    // initialized once (its state never returns to UNINITIALIZED), so
+    // Start() after Stop() re-arms the stopped io_service via reset()
+    // instead of calling init_asio() again.
+    bool m_asioInitialized = false;
 
     // Main-thread dispatch (see "Main-thread request dispatch" above)
     HWND m_msgWindow = nullptr;

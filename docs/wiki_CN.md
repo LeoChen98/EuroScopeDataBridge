@@ -109,7 +109,7 @@ EuroScope Data Bridge 是一个 EuroScope 插件 DLL，在本地 `ws://127.0.0.1
 通信模式：
 
 - **Push（订阅推送）**：EuroScope 回调事件自动序列化为 JSON。客户端需先用 `subscribe` 请求订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件对应的回调会被跳过（不做序列化与推送）。详见 [订阅](#订阅)。
-- **Request/Response（请求/响应）**：客户端发送带唯一 `id` 的请求，服务端在处理后返回带有相同 `id` 的响应。请求到达后立即内联处理，响应即时返回。
+- **Request/Response（请求/响应）**：客户端发送带唯一 `id` 的请求，服务端在处理后返回带有相同 `id` 的响应。每个请求在独立的异步工作线程中处理，WebSocket IO 线程不再阻塞；响应就绪后即时返回。
 
 定时行为：
 
@@ -1877,6 +1877,7 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 | `Missing or invalid 'index' (0-8 required)` | `set_flight_strip_annotation` 的 `index` 无效 |
 | `Missing or invalid 'value' for set_communication_type` | `set_communication_type` 的 `value` 为空或缺失 |
 | `Failed to set <field>` | 设置操作执行失败（目标无效或数值被拒绝） |
+| `Server busy: too many in-flight requests` | 并发请求达到上限（16） |
 | `Unknown message type: <type>` | 不支持的请求类型 |
 | `Invalid JSON` | 请求不是合法的 JSON（立即返回错误，不进入处理队列） |
 
@@ -1888,4 +1889,5 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 |------|-----|------|
 | WebSocket 端口 | `48521` | 仅监听 `127.0.0.1` |
 | 入站消息大小上限 | `1 MB` | 超限帧以 `message_too_big` 协议错误拒绝 |
+| 并发请求上限 | `16` | 超出后立即返回 `Server busy` 错误 |
 | 定时器间隔 | `1 s` | `timer` 事件频率 |

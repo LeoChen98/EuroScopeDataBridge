@@ -55,6 +55,7 @@
     <a class="toc-link toc-l2" href="#subscription">Subscription</a>
     <a class="toc-link toc-l3" href="#subscribe">subscribe</a>
     <a class="toc-link toc-l3" href="#unsubscribe">unsubscribe</a>
+    <a class="toc-link toc-l2" href="#heartbeat-ping--pong">Heartbeat (ping / pong)</a>
     <a class="toc-link toc-l2" href="#requests-client--server">Requests (client → server)</a>
     <a class="toc-link toc-l3" href="#query">Query</a>
     <a class="toc-link toc-l4" href="#get_flightplans">get_flightplans</a>
@@ -505,6 +506,26 @@
   }
 }</code></pre>
 </div>
+<hr>
+<h2 id="heartbeat-ping--pong">Heartbeat (ping / pong)</h2>
+<p>Application-level heartbeats are supported but <strong>not enforced</strong>: a client may send <code>ping</code> at any time and the server replies with <code>pong</code> immediately. Combine with the subscribed <code>timer</code> event for connection health checks.</p>
+<p><strong>Request example:</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;ping&quot;, &quot;id&quot;: &quot;hb-1&quot; }</code></pre>
+</div>
+<p><strong>Response example:</strong></p>
+<div class="code-block">
+  <div class="code-head">
+    <span class="code-lang">JSON</span>
+    <button class="code-copy" type="button" aria-label="Copy">Copy</button>
+  </div>
+  <pre><code class="lang-json">{ &quot;type&quot;: &quot;pong&quot;, &quot;id&quot;: &quot;hb-1&quot; }</code></pre>
+</div>
+<ul><li><code>id</code> is optional; <code>pong</code> echoes the <code>id</code> carried by the <code>ping</code> (omitted when absent)</li><li>pings are answered inline on the IO thread and never consume a concurrent-request slot</li></ul>
 <hr>
 <h2 id="requests-client--server">Requests (client → server)</h2>
 <h3 id="query">Query</h3>

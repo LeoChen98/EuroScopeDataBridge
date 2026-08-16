@@ -312,8 +312,21 @@ void WebSocketServer::OnMessage(ConnectionHdl hdl, WsServer::message_ptr msg) {
         sendError("Invalid request: expected a JSON object");
         return;
     }
-    if (!j.contains(json_key::TYPE)) {
+    if (!j.contains(json_key::TYPE) || !j[json_key::TYPE].is_string()) {
         sendError("Missing 'type' field");
+        return;
+    }
+    const std::string type = j[json_key::TYPE].get<std::string>();
+
+    // Application-level heartbeat: optional, not enforced. Answer inline so
+    // the pong goes out instantly and no worker thread is spent.
+    if (type == msg_type::PING) {
+        json pong;
+        pong[json_key::TYPE] = msg_type::PONG;
+        if (j.contains(json_key::ID) && j[json_key::ID].is_string())
+            pong[json_key::ID] = j[json_key::ID];
+        websocketpp::lib::error_code ec;
+        m_server.send(hdl, pong.dump(), websocketpp::frame::opcode::text, ec);
         return;
     }
 

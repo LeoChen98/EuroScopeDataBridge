@@ -136,9 +136,9 @@
 <h2 id="概述">概述</h2>
 <p>EuroScope Data Bridge 是一个 EuroScope 插件 DLL，在本地 <code>ws://127.0.0.1:48521</code> 启动 WebSocket 服务。所有通信均使用 JSON 格式。</p>
 <p>通信模式：</p>
-<ul><li><strong>Push（订阅推送）</strong>：EuroScope 回调事件自动序列化为 JSON。客户端需先用 <code>subscribe</code> 请求订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件对应的回调会被跳过（不做序列化与推送）。详见 <a href="#订阅">订阅</a>。</li><li><strong>Request/Response（请求/响应）</strong>：客户端发送带唯一 <code>id</code> 的请求，服务端在处理后返回带有相同 <code>id</code> 的响应。请求由 <code>OnTimer</code> 回调在 EuroScope 主线程排空处理——这是 EuroScope SDK 访问唯一安全的上下文。</li></ul>
+<ul><li><strong>Push（订阅推送）</strong>：EuroScope 回调事件自动序列化为 JSON。客户端需先用 <code>subscribe</code> 请求订阅感兴趣的事件类型，此后仅订阅的客户端会收到对应事件；没有任何客户端订阅某事件时，该事件对应的回调会被跳过（不做序列化与推送）。详见 <a href="#订阅">订阅</a>。</li><li><strong>Request/Response（请求/响应）</strong>：客户端发送带唯一 <code>id</code> 的请求，服务端在处理后返回带有相同 <code>id</code> 的响应。请求到达后立即内联处理，响应即时返回。</li></ul>
 <p>定时行为：</p>
-<ul><li>入站请求由 EuroScope 的 <code>OnTimer</code> 回调每秒处理一次。</li><li>每 <strong>1 秒</strong> 触发 <code>timer</code> 事件——但仅推送给订阅了 <code>timer</code> 的客户端。</li></ul>
+<ul><li>每 <strong>1 秒</strong> 触发 <code>timer</code> 事件——但仅推送给订阅了 <code>timer</code> 的客户端。</li></ul>
 <hr>
 <h2 id="连接">连接</h2>
 <div class="table-wrap"><table><thead><tr><th>属性</th><th>值</th></tr></thead><tbody><tr><td>协议</td><td>WebSocket (ws)</td></tr><tr><td>主机</td><td><code>127.0.0.1</code>（仅本地）</td></tr><tr><td>端口</td><td><code>48521</code></td></tr></tbody></table></div>
@@ -1590,7 +1590,7 @@
 <div class="table-wrap"><table><thead><tr><th>错误消息</th><th>触发条件</th></tr></thead><tbody><tr><td><code>Missing 'type' field</code></td><td>请求缺少 <code>type</code> 字段</td></tr><tr><td><code>Invalid request: expected a JSON object</code></td><td>请求负载不是 JSON 对象</td></tr><tr><td><code>Missing 'callsign' for setter operation</code></td><td>设置操作缺少 <code>data.callsign</code></td></tr><tr><td><code>Flight plan not found: &lt;callsign&gt;</code></td><td>指定的飞行计划不存在</td></tr><tr><td><code>Radar target not found: &lt;callsign&gt;</code></td><td>指定的雷达目标不存在</td></tr><tr><td><code>Voice channel not found: &lt;name&gt;</code></td><td>指定的语音频道未找到</td></tr><tr><td><code>Missing 'target' controller</code></td><td><code>initiate_handoff</code> 或 <code>push_flight_strip</code> 缺少 <code>target</code></td></tr><tr><td><code>Missing 'point' or 'time'</code></td><td><code>set_estimation</code> 缺少 <code>point</code> 或 <code>time</code></td></tr><tr><td><code>Missing 'fp_callsign' or 'rt_callsign'</code></td><td><code>correlate</code> 缺少参数</td></tr><tr><td><code>Missing or invalid 'index' (0-8 required)</code></td><td><code>set_flight_strip_annotation</code> 的 <code>index</code> 无效</td></tr><tr><td><code>Missing or invalid 'value' for set_communication_type</code></td><td><code>set_communication_type</code> 的 <code>value</code> 为空或缺失</td></tr><tr><td><code>Failed to set &lt;field&gt;</code></td><td>设置操作执行失败（目标无效或数值被拒绝）</td></tr><tr><td><code>Unknown message type: &lt;type&gt;</code></td><td>不支持的请求类型</td></tr><tr><td><code>Invalid JSON</code></td><td>请求不是合法的 JSON（立即返回错误，不进入处理队列）</td></tr></tbody></table></div>
 <hr>
 <h2 id="配置常量">配置常量</h2>
-<div class="table-wrap"><table><thead><tr><th>常量</th><th>值</th><th>说明</th></tr></thead><tbody><tr><td>WebSocket 端口</td><td><code>48521</code></td><td>仅监听 <code>127.0.0.1</code></td></tr><tr><td>请求处理间隔</td><td><code>1 s</code></td><td><code>OnTimer</code> 在 EuroScope 主线程排空并处理请求</td></tr><tr><td>入站消息大小上限</td><td><code>1 MB</code></td><td>超限帧以 <code>message_too_big</code> 协议错误拒绝</td></tr><tr><td>入站队列上限</td><td><code>1024</code></td><td>队列满时丢弃最旧请求</td></tr><tr><td>定时器间隔</td><td><code>1 s</code></td><td><code>timer</code> 事件频率</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>常量</th><th>值</th><th>说明</th></tr></thead><tbody><tr><td>WebSocket 端口</td><td><code>48521</code></td><td>仅监听 <code>127.0.0.1</code></td></tr><tr><td>入站消息大小上限</td><td><code>1 MB</code></td><td>超限帧以 <code>message_too_big</code> 协议错误拒绝</td></tr><tr><td>定时器间隔</td><td><code>1 s</code></td><td><code>timer</code> 事件频率</td></tr></tbody></table></div>
   </article>
 </main>
 <footer class="foot">

@@ -18,7 +18,7 @@ An EuroScope simulation ATC plugin DLL that exposes live flight data through a l
 ```
 
 - **Push mode (subscription-based)**: EuroScope callback events (radar, flight plans, controllers, chat, METAR, etc.) are automatically serialized to JSON. A client must first `subscribe` to the event types it is interested in; only subscribed clients receive the matching events. When no client has subscribed to an event type, its callback is skipped entirely (no serialization, no push).
-- **Pull/Request mode**: clients send JSON requests (e.g. `get_flightplans`, `get_full_snapshot`). Incoming requests are drained and processed by the `OnTimer` callback on the EuroScope main thread, with the results returned over WebSocket.
+- **Pull/Request mode**: clients send JSON requests (e.g. `get_flightplans`, `get_full_snapshot`). Requests are processed inline as soon as they arrive, with the results returned immediately over WebSocket.
 - **Timed events**: a `timer` event (with a tick counter) fires once per second, likewise only pushed to clients that subscribed to it — handy for client-side polling or heartbeat detection.
 
 ## Tech stack

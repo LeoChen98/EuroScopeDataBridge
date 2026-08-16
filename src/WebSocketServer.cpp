@@ -48,9 +48,8 @@ std::string WebSocketServer::GenerateClientId() {
 // ============================================================================
 // Construction / Destruction
 // ============================================================================
-WebSocketServer::WebSocketServer(int port, ThreadSafeQueue& incomingQueue)
+WebSocketServer::WebSocketServer(int port)
     : m_port(port)
-    , m_incomingQueue(incomingQueue)
 {
     WSADATA wsaData;
     const int err = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -63,16 +62,6 @@ WebSocketServer::~WebSocketServer() {
     Stop();
     if (m_wsaInitialized)
         WSACleanup();
-}
-
-// ============================================================================
-// DrainIncomingQueue — called from the EuroScope main thread (OnTimer)
-// ============================================================================
-void WebSocketServer::DrainIncomingQueue() {
-    if (!m_requestProcessor) return;
-    m_incomingQueue.Drain([this](std::string&& req) {
-        m_requestProcessor(std::move(req));
-    });
 }
 
 // ============================================================================
@@ -282,7 +271,7 @@ void WebSocketServer::OnFail(ConnectionHdl hdl) {
 }
 
 // ============================================================================
-// OnMessage — parse JSON, inject clientId, push to queue
+// OnMessage — parse JSON, inject clientId, process inline, respond immediately
 // ============================================================================
 void WebSocketServer::OnMessage(ConnectionHdl hdl, WsServer::message_ptr msg) {
     std::string clientId;
@@ -321,8 +310,17 @@ void WebSocketServer::OnMessage(ConnectionHdl hdl, WsServer::message_ptr msg) {
         return;
     }
 
+    if (!m_requestProcessor) return;
+
+    // Process inline on the ASIO IO thread so the response goes out
+    // immediately — no interval-triggered queue. One bad request must not
+    // take down the IO loop.
     j[json_key::CLIENT_ID] = clientId;
-    m_incomingQueue.PushWithLimit(j.dump(), MAX_INCOMING_QUEUE_SIZE);
+    try {
+        m_requestProcessor(j.dump());
+    } catch (...) {
+        std::cerr << "[DataBridge] Exception while processing a request inline" << std::endl;
+    }
 }
 
 // ============================================================================

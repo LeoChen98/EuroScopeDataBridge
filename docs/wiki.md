@@ -109,11 +109,10 @@ EuroScope Data Bridge is an EuroScope plugin DLL that starts a WebSocket server 
 Communication modes:
 
 - **Push (subscription-based)**: EuroScope callback events are automatically serialized to JSON. A client must first send a `subscribe` request listing the event types it wants; after that, only subscribed clients receive the matching events. If no client has subscribed to an event type, the corresponding EuroScope callback is skipped entirely (no serialization, no push). See [Subscription](#subscription).
-- **Request/Response**: the client sends a request with a unique `id`; the server returns a response carrying the same `id` after processing. Requests are drained and processed by the `OnTimer` callback on the EuroScope main thread — the only context where EuroScope SDK access is safe.
+- **Request/Response**: the client sends a request with a unique `id`; the server returns a response carrying the same `id` after processing. Requests are processed inline as soon as they arrive, so the response is sent immediately.
 
 Timing behavior:
 
-- Incoming requests are processed once per second by the EuroScope `OnTimer` callback.
 - A `timer` event is sent every **1 second** — but only to clients that subscribed to `timer`.
 
 ---
@@ -1888,8 +1887,6 @@ All errors are returned via `response` messages with `data.success` set to `fals
 | Constant | Value | Description |
 |----------|-------|-------------|
 | WebSocket port | `48521` | Listens on `127.0.0.1` only |
-| Request processing interval | `1 s` | `OnTimer` drains and processes requests on the EuroScope main thread |
 | Max inbound message size | `1 MB` | Larger frames are rejected with the `message_too_big` protocol error |
-| Inbound queue size | `1024` | When full, the oldest queued request is dropped |
 | Timer interval | `1 s` | `timer` event frequency |
 

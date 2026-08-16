@@ -27,6 +27,7 @@
 - [Subscription](#subscription)
   - [subscribe](#subscribe)
   - [unsubscribe](#unsubscribe)
+- [Heartbeat (ping / pong)](#heartbeat-ping--pong)
 - [Requests (client → server)](#requests-client--server)
   - [Query](#query)
     - [get_flightplans](#get_flightplans)

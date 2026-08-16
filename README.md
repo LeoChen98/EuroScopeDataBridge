@@ -143,3 +143,5 @@ EuroscopeDataBridge/
 ## License
 
 MIT License © 2026 Leo Chen — see [LICENSE](LICENSE).
+
+Third-party components and their licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

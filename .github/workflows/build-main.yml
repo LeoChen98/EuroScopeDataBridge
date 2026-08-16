@@ -24,6 +24,13 @@ jobs:
         shell: pwsh
         run: |
           git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
+          # builtin-baseline 指向历史 commit，浅克隆（--depth 1）不含它：显式 fetch 该
+          # commit，否则 vcpkg 读取 versions/baseline.json 时 git show 会失败。
+          $baseline = (Get-Content vcpkg.json | ConvertFrom-Json).'builtin-baseline'
+          if ($baseline) {
+            git -C "$env:RUNNER_TEMP\vcpkg" fetch --depth 1 origin $baseline
+            if ($LASTEXITCODE -ne 0) { throw "Failed to fetch vcpkg baseline $baseline" }
+          }
           & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
           # 按 vcpkg.json 安装 asio/nlohmann-json 到仓库根目录 vcpkg_installed（vcxproj 的 include 路径依赖它）
           & "$env:RUNNER_TEMP\vcpkg\vcpkg.exe" install --triplet x86-windows

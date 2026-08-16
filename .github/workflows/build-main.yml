@@ -2,6 +2,12 @@ name: Build Main Project
 
 on:
   push:
+    paths-ignore:
+      # Documentation/site-only changes do not need a C++ rebuild.
+      - 'docs/**'
+      - 'page/**'
+      - '**/*.md'
+      - 'AGENTS.md'
 
 jobs:
   build:

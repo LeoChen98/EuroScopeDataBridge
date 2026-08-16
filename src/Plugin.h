@@ -81,6 +81,9 @@ private:
     void PushEvent(const char* type, const std::string& dataJson);
     void PushEvent(const char* type);
 
+    // Helper: log an exception escaping from an ES callback (catch(...) handler)
+    void LogCallbackError(const char* callbackName);
+
 
     edb::ThreadSafeQueue m_incomingQueue;
     std::unique_ptr<edb::WebSocketServer> m_wsServer;

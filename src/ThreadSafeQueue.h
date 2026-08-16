@@ -4,6 +4,7 @@
 #include <string>
 #include <mutex>
 #include <condition_variable>
+#include <iostream>
 
 namespace edb {
 
@@ -69,12 +70,22 @@ public:
     // --- Drain ---
     // Pop all available items without blocking. Returns number drained.
     // Items are appended to `out` via callback.
+    // A callback exception aborts only the current item; remaining items are
+    // still processed so one bad message can't stall the whole queue.
     template<typename F>
     size_t Drain(F&& callback) {
         size_t count = 0;
         std::string item;
         while (TryPop(item)) {
-            callback(std::move(item));
+            try {
+                callback(std::move(item));
+            } catch (const std::exception& e) {
+                std::cerr << "[DataBridge] Exception while handling queued message: "
+                          << e.what() << std::endl;
+            } catch (...) {
+                std::cerr << "[DataBridge] Unknown exception while handling queued message"
+                          << std::endl;
+            }
             ++count;
         }
         return count;

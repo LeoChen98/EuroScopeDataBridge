@@ -6,6 +6,7 @@
 
 #include <string>
 #include <vector>
+#include <utility>
 
 using json = nlohmann::json;
 using namespace EuroScopePlugIn;
@@ -17,14 +18,37 @@ namespace {
 // Response helpers
 // ============================================================================
 
+// Parse a JSON string produced by our serializers. Returns {false, null} on
+// failure so the caller can skip the record instead of aborting the batch.
+// NOTE: never use `if (json)` — nlohmann::json has no operator bool; the
+// templated operator ValueType() would instantiate get<bool>() and throw
+// type_error(302) on any non-boolean value.
+std::pair<bool, json> SafeParse(const std::string& s)
+{
+    try {
+        return {true, json::parse(s)};
+    } catch (...) {
+        return {false, json()};
+    }
+}
+
 std::string MakeResponse(const std::string& id, bool success, const std::string& resultJson, const std::string& error)
 {
     json resp;
     resp[json_key::TYPE] = msg_type::RESPONSE;
     resp[json_key::ID] = id;
     resp[json_key::DATA][json_key::SUCCESS] = success;
-    if (!resultJson.empty())
-        resp[json_key::DATA]["result"] = json::parse(resultJson);
+    if (!resultJson.empty()) {
+        auto parsed = SafeParse(resultJson);
+        if (parsed.first)
+            resp[json_key::DATA]["result"] = std::move(parsed.second);
+        else {
+            // Serializer output unexpectedly invalid: report failure instead of
+            // silently returning success with a missing result.
+            resp[json_key::DATA][json_key::SUCCESS] = false;
+            resp[json_key::DATA][json_key::ERROR] = "Failed to serialize result";
+        }
+    }
     if (!error.empty())
         resp[json_key::DATA][json_key::ERROR] = error;
     return resp.dump();
@@ -80,10 +104,13 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
     json req;
     try {
         req = json::parse(requestJson);
-    } catch (const json::parse_error&) {
+    } catch (const json::exception&) {
         // Malformed JSON; ignore silently
         return "";
     }
+    // find()/contains() on a non-object value would throw type_error(305).
+    if (!req.is_object())
+        return MakeError("", "Invalid request: expected a JSON object");
 
     std::string id;
     auto idIt = req.find(json_key::ID);
@@ -112,20 +139,20 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!callsign.empty())
         {
             CFlightPlan fp = plugin.FlightPlanSelect(callsign.c_str());
-            if (fp.IsValid())
-                result.push_back(json::parse(SerializeFlightPlanToJson(fp)));
+            if (fp.IsValid()) {
+                auto parsed = SafeParse(SerializeFlightPlanToJson(fp));
+                if (parsed.first)
+                    result.push_back(std::move(parsed.second));
+            }
         }
         else
         {
             CFlightPlan fp = plugin.FlightPlanSelectFirst();
             while (fp.IsValid())
             {
-                try {
-                    result.push_back(json::parse(SerializeFlightPlanToJson(fp)));
-                }
-                catch (...) {
-                }
-
+                auto parsed = SafeParse(SerializeFlightPlanToJson(fp));
+                if (parsed.first)
+                    result.push_back(std::move(parsed.second));
                 fp = plugin.FlightPlanSelectNext(fp);
             }
         }
@@ -138,15 +165,20 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!callsign.empty())
         {
             CRadarTarget rt = plugin.RadarTargetSelect(callsign.c_str());
-            if (rt.IsValid())
-                result.push_back(json::parse(SerializeRadarTargetToJson(rt)));
+            if (rt.IsValid()) {
+                auto parsed = SafeParse(SerializeRadarTargetToJson(rt));
+                if (parsed.first)
+                    result.push_back(std::move(parsed.second));
+            }
         }
         else
         {
             CRadarTarget rt = plugin.RadarTargetSelectFirst();
             while (rt.IsValid())
             {
-                result.push_back(json::parse(SerializeRadarTargetToJson(rt)));
+                auto parsed = SafeParse(SerializeRadarTargetToJson(rt));
+                if (parsed.first)
+                    result.push_back(std::move(parsed.second));
                 rt = plugin.RadarTargetSelectNext(rt);
             }
         }
@@ -158,13 +190,18 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         json result = json::array();
 
         CController myself = plugin.ControllerMyself();
-        if (myself.IsValid())
-            result.push_back(json::parse(SerializeControllerToJson(myself)));
+        if (myself.IsValid()) {
+            auto parsed = SafeParse(SerializeControllerToJson(myself));
+            if (parsed.first)
+                result.push_back(std::move(parsed.second));
+        }
 
         CController ctr = plugin.ControllerSelectFirst();
         while (ctr.IsValid())
         {
-            result.push_back(json::parse(SerializeControllerToJson(ctr)));
+            auto parsed = SafeParse(SerializeControllerToJson(ctr));
+            if (parsed.first)
+                result.push_back(std::move(parsed.second));
             ctr = plugin.ControllerSelectNext(ctr);
         }
         return MakeSuccess(id, result.dump());
@@ -179,7 +216,9 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         CSectorElement se = plugin.SectorFileElementSelectFirst(filterType);
         while (se.IsValid())
         {
-            result.push_back(json::parse(SerializeSectorElementToJson(se)));
+            auto parsed = SafeParse(SerializeSectorElementToJson(se));
+            if (parsed.first)
+                result.push_back(std::move(parsed.second));
             se = plugin.SectorFileElementSelectNext(se, filterType);
         }
         return MakeSuccess(id, result.dump());
@@ -191,7 +230,9 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         CGrountToAirChannel ch = plugin.GroundToArChannelSelectFirst();
         while (ch.IsValid())
         {
-            result.push_back(json::parse(SerializeVoiceChannelToJson(ch)));
+            auto parsed = SafeParse(SerializeVoiceChannelToJson(ch));
+            if (parsed.first)
+                result.push_back(std::move(parsed.second));
             ch = plugin.GroundToArChannelSelectNext(ch);
         }
         return MakeSuccess(id, result.dump());
@@ -225,7 +266,9 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         while (fp.IsValid())
         {
             std::string fpJson = SerializeFlightPlanToJson(fp);
-            result["flightplans"].push_back(json::parse(fpJson));
+            auto parsed = SafeParse(fpJson);
+            if (parsed.first)
+                result["flightplans"].push_back(std::move(parsed.second));
             fp = plugin.FlightPlanSelectNext(fp);
         }
 
@@ -234,7 +277,9 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         while (rt.IsValid())
         {
             std::string rtJson = SerializeRadarTargetToJson(rt);
-            result["radar_targets"].push_back(json::parse(rtJson));
+            auto parsed = SafeParse(rtJson);
+            if (parsed.first)
+                result["radar_targets"].push_back(std::move(parsed.second));
             rt = plugin.RadarTargetSelectNext(rt);
         }
 
@@ -243,7 +288,9 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         while (ctr.IsValid())
         {
             std::string ctrJson = SerializeControllerToJson(ctr);
-            result["controllers"].push_back(json::parse(ctrJson));
+            auto parsed = SafeParse(ctrJson);
+            if (parsed.first)
+                result["controllers"].push_back(std::move(parsed.second));
             ctr = plugin.ControllerSelectNext(ctr);
         }
 
@@ -252,7 +299,9 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (myself.IsValid())
         {
             std::string myJson = SerializeControllerToJson(myself);
-            result["controllers"].push_back(json::parse(myJson));
+            auto parsed = SafeParse(myJson);
+            if (parsed.first)
+                result["controllers"].push_back(std::move(parsed.second));
         }
 
         return MakeSuccess(id, result.dump());
@@ -276,7 +325,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanControllerAssignedData cad = fp.GetControllerAssignedData();
         bool ok = cad.SetSquawk(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set squawk for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_FINAL_ALTITUDE)
@@ -287,7 +337,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanControllerAssignedData cad = fp.GetControllerAssignedData();
         bool ok = cad.SetFinalAltitude(intValue);
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set final altitude for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_CLEARED_ALTITUDE)
@@ -296,7 +347,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanControllerAssignedData cad = fp.GetControllerAssignedData();
         bool ok = cad.SetClearedAltitude(intValue);
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set cleared altitude for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_SCRATCHPAD)
@@ -305,7 +357,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanControllerAssignedData cad = fp.GetControllerAssignedData();
         bool ok = cad.SetScratchPadString(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set scratchpad for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_SPEED)
@@ -314,7 +367,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanControllerAssignedData cad = fp.GetControllerAssignedData();
         bool ok = cad.SetAssignedSpeed(intValue);
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set speed for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_MACH)
@@ -323,7 +377,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanControllerAssignedData cad = fp.GetControllerAssignedData();
         bool ok = cad.SetAssignedMach(intValue);
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set mach for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_RATE)
@@ -332,7 +387,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanControllerAssignedData cad = fp.GetControllerAssignedData();
         bool ok = cad.SetAssignedRate(intValue);
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set rate for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_HEADING)
@@ -341,7 +397,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanControllerAssignedData cad = fp.GetControllerAssignedData();
         bool ok = cad.SetAssignedHeading(intValue);
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set heading for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_DIRECT_TO)
@@ -350,16 +407,20 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanControllerAssignedData cad = fp.GetControllerAssignedData();
         bool ok = cad.SetDirectToPointName(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set direct-to for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_COMMUNICATION_TYPE)
     {
+        if (value.empty())
+            return MakeError(id, "Missing or invalid 'value' for set_communication_type");
         CFlightPlan fp = lookupFp(callsign);
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanControllerAssignedData cad = fp.GetControllerAssignedData();
-        bool ok = cad.SetCommunicationType(value.empty() ? 0 : value[0]);
-        return MakeSuccess(id, ok ? "{}" : "");
+        bool ok = cad.SetCommunicationType(value[0]);
+        if (!ok) return MakeError(id, "Failed to set communication type for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     // ========================================================================
@@ -372,7 +433,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetPlanType(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set plan type for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_AIRCRAFT_INFO)
@@ -381,7 +443,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetAircraftInfo(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set aircraft info for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_ORIGIN)
@@ -390,7 +453,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetOrigin(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set origin for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_DESTINATION)
@@ -399,7 +463,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetDestination(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set destination for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_ALTERNATE)
@@ -408,7 +473,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetAlternate(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set alternate for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_REMARKS)
@@ -417,7 +483,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetRemarks(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set remarks for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_ROUTE)
@@ -426,7 +493,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetRoute(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set route for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_TRUE_AIRSPEED)
@@ -435,7 +503,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetTrueAirspeed(intValue);
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set true airspeed for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_DEPARTURE_TIME)
@@ -444,7 +513,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetEstimatedDepartureTime(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set departure time for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_ACTUAL_DEPARTURE_TIME)
@@ -453,7 +523,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetActualDepartureTime(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set actual departure time for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_ENROUTE_HOURS)
@@ -462,7 +533,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetEnrouteHours(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set enroute hours for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_ENROUTE_MINUTES)
@@ -471,7 +543,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetEnrouteMinutes(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set enroute minutes for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_FUEL_HOURS)
@@ -480,7 +553,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetFuelHours(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set fuel hours for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::SET_FUEL_MINUTES)
@@ -489,7 +563,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.SetFuelMinutes(value.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set fuel minutes for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     // ========================================================================
@@ -502,7 +577,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         CFlightPlanData fpd = fp.GetFlightPlanData();
         bool ok = fpd.AmendFlightPlan();
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to amend flight plan for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::START_TRACKING)
@@ -510,7 +586,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         CFlightPlan fp = lookupFp(callsign);
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         bool ok = fp.StartTracking();
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to start tracking for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::END_TRACKING)
@@ -518,7 +595,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         CFlightPlan fp = lookupFp(callsign);
         if (!fp.IsValid()) return MakeError(id, "Flight plan not found: " + callsign);
         bool ok = fp.EndTracking();
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to end tracking for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::ACCEPT_HANDOFF)
@@ -544,7 +622,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         std::string target = JStr(data, "target");
         if (target.empty()) return MakeError(id, "Missing 'target' controller");
         bool ok = fp.InitiateHandoff(target.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to initiate handoff for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::PUSH_FLIGHT_STRIP)
@@ -592,7 +671,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
             return MakeError(id, "Missing or invalid 'index' (0-8 required)");
         CFlightPlanControllerAssignedData cad = fp.GetControllerAssignedData();
         bool ok = cad.SetFlightStripAnnotation(idx, annotation.c_str());
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to set flight strip annotation for " + callsign);
+        return MakeSuccess(id, "{}");
     }
 
     // ========================================================================
@@ -613,7 +693,8 @@ std::string HandleRequest(CPlugIn& plugin, const std::string& requestJson)
         if (!rt.IsValid()) return MakeError(id, "Radar target not found: " + rtCallsign);
 
         bool ok = rt.CorrelateWithFlightPlan(fp);
-        return MakeSuccess(id, ok ? "{}" : "");
+        if (!ok) return MakeError(id, "Failed to correlate " + fpCallsign + " with " + rtCallsign);
+        return MakeSuccess(id, "{}");
     }
 
     if (type == msg_type::UNCORRELATE)

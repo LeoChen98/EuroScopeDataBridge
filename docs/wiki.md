@@ -1881,7 +1881,7 @@ All errors are returned via `response` messages with `data.success` set to `fals
 | `Failed to set <field>` | A setter returned an error (target invalid or value rejected) |
 | `Server busy: too many in-flight requests` | The concurrent request cap (64) is reached |
 | `Unknown message type: <type>` | Unsupported request type |
-| `Invalid JSON` | The request is not valid JSON (returned immediately, not queued for processing) |
+| `Invalid JSON` | The request is not valid JSON (rejected immediately without processing) |
 
 ---
 
@@ -1890,7 +1890,9 @@ All errors are returned via `response` messages with `data.success` set to `fals
 | Constant | Value | Description |
 |----------|-------|-------------|
 | WebSocket port | `48521` | Listens on `127.0.0.1` only |
+| Max concurrent clients | `64` | New connections beyond the cap are rejected |
 | Max inbound message size | `1 MB` | Larger frames are rejected with the `message_too_big` protocol error |
 | Max concurrent requests | `64` | Requests beyond the cap get an immediate `Server busy` error |
+| Per-client send queue | `32 MB` | Backpressure guard; frames are dropped for slow consumers |
 | Timer interval | `1 s` | `timer` event frequency |
 

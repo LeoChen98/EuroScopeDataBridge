@@ -12,7 +12,7 @@ EuroScope 模拟飞行管制插件 DLL，通过本地 WebSocket API 对外暴露
 │                      │    JSON Push Events + Request/Response    │  (网页 / 脚本 /   │
 │  DataBridgePlugin    │                                           │   数据分析工具)   │
 │  ├─ ES Callbacks     │                                           └──────────────────┘
-│  ├─ OnTimer → Drain  │
+│  ├─ 每请求工作线程        │
 │  └─ FullSnapshot     │
 └──────────────────────┘
 ```
@@ -106,7 +106,7 @@ ws.send(JSON.stringify({
   - 连接/断开 WebSocket（默认 `127.0.0.1:48521`，Host/Port 可配置），含连接状态指示灯与消息计数
   - 快捷查询：Get Flight Plans / Get Radar Targets / Get Controllers，结果以表格展示
   - 自定义命令：输入任意 JSON 请求（如 `{"type":"get_flightplans"}`）并发送
-  - 实时日志面板：显示所有收发的消息
+  - 实时日志面板：显示所有收发的消息，支持右键「Copy JSON」把某行的完整原始 JSON 复制到剪贴板
 
 **运行方法**：确保 EuroScope 已加载插件 DLL 并启动 WebSocket 服务，然后用 Visual Studio 2022 打开 `EuroscopeDataBridge.sln`，将 `EuroScopeDataBridge.TestProject` 设为启动项目运行（或执行 `dotnet run --project tests/EuroScopeDataBridge.TestProject`，需 .NET 8 SDK）。
 

@@ -133,6 +133,9 @@ namespace msg_type {
 
     // Response
     constexpr auto RESPONSE                      = "response";
+    // Response type used by subscribe/unsubscribe replies (distinct from the
+    // generic "response" so clients can tell subscription state apart).
+    constexpr auto SUBSCRIPTION                  = "subscription";
     constexpr auto ERROR                         = "error";
 
     // Internal routing tag

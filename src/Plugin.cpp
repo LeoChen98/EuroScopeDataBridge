@@ -31,12 +31,12 @@ DataBridgePlugin::DataBridgePlugin()
         DisplayUserMessage("message", "DataBridge", msg.c_str(), true, false, false, false, false);
     });
 
-    // Register request processor: executed on the EuroScope main thread — the
-    // server's drain thread posts incoming requests to a hidden message
-    // window (WndProc runs on the main thread), with OnTimer as a fallback
-    // pump. Extracts client_id (injected by OnMessage), routes
-    // subscribe/unsubscribe to the subscription manager, otherwise calls
-    // HandleRequest and routes the response.
+    // Register request processor: executed on the EuroScope main thread —
+    // OnTimer drains the incoming queue through DrainIncomingQueue, so all
+    // EuroScope SDK access happens inside a plugin callback context. Extracts
+    // client_id (injected by OnMessage), routes subscribe/unsubscribe to the
+    // subscription manager, otherwise calls HandleRequest and routes the
+    // response.
     m_wsServer->SetRequestProcessor([this](std::string&& requestStr) {
         std::string clientId;
         std::string type;
@@ -334,11 +334,11 @@ void DataBridgePlugin::OnAirportRunwayActivityChanged(void)
 void DataBridgePlugin::OnTimer(int Counter)
 {
     try {
-    // The server's drain thread collects incoming WebSocket requests and posts
-    // them to a hidden message window whose WndProc runs on this (the
-    // EuroScope main) thread. Pump any leftovers here as a fallback so
-    // requests progress even if the window message was dropped or delayed.
-    m_wsServer->ProcessPendingRequests();
+    // Incoming WebSocket requests are drained and processed here, on the
+    // EuroScope main thread inside the OnTimer callback — the only context
+    // where EuroScope SDK access is safe. Worst-case request latency is one
+    // timer tick (1 s).
+    m_wsServer->DrainIncomingQueue();
 
     // Send timer event every second (only to subscribers)
     if (m_wsServer->HasSubscribers(msg_type::TIMER))

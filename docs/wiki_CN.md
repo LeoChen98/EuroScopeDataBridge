@@ -27,6 +27,7 @@
 - [订阅](#订阅)
   - [subscribe](#subscribe)
   - [unsubscribe](#unsubscribe)
+- [心跳（Ping / Pong）](#心跳ping--pong)
 - [请求（客户端 → 服务端）](#请求客户端--服务端)
   - [查询类](#查询类)
     - [get_flightplans](#get_flightplans)

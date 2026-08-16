@@ -1879,7 +1879,7 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 | `Missing or invalid 'index' (0-8 required)` | `set_flight_strip_annotation` 的 `index` 无效 |
 | `Missing or invalid 'value' for set_communication_type` | `set_communication_type` 的 `value` 为空或缺失 |
 | `Failed to set <field>` | 设置操作执行失败（目标无效或数值被拒绝） |
-| `Server busy: too many in-flight requests` | 并发请求达到上限（16） |
+| `Server busy: too many in-flight requests` | 并发请求达到上限（64） |
 | `Unknown message type: <type>` | 不支持的请求类型 |
 | `Invalid JSON` | 请求不是合法的 JSON（立即返回错误，不进入处理队列） |
 
@@ -1891,5 +1891,5 @@ Push 事件**默认不推送**。客户端必须订阅需要的事件类型，�
 |------|-----|------|
 | WebSocket 端口 | `48521` | 仅监听 `127.0.0.1` |
 | 入站消息大小上限 | `1 MB` | 超限帧以 `message_too_big` 协议错误拒绝 |
-| 并发请求上限 | `16` | 超出后立即返回 `Server busy` 错误 |
+| 并发请求上限 | `64` | 超出后立即返回 `Server busy` 错误 |
 | 定时器间隔 | `1 s` | `timer` 事件频率 |

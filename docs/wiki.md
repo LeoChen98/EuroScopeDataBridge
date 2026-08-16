@@ -1879,7 +1879,7 @@ All errors are returned via `response` messages with `data.success` set to `fals
 | `Missing or invalid 'index' (0-8 required)` | `set_flight_strip_annotation` has an invalid `index` |
 | `Missing or invalid 'value' for set_communication_type` | `set_communication_type` has an empty or missing `value` |
 | `Failed to set <field>` | A setter returned an error (target invalid or value rejected) |
-| `Server busy: too many in-flight requests` | The concurrent request cap (16) is reached |
+| `Server busy: too many in-flight requests` | The concurrent request cap (64) is reached |
 | `Unknown message type: <type>` | Unsupported request type |
 | `Invalid JSON` | The request is not valid JSON (returned immediately, not queued for processing) |
 
@@ -1891,6 +1891,6 @@ All errors are returned via `response` messages with `data.success` set to `fals
 |----------|-------|-------------|
 | WebSocket port | `48521` | Listens on `127.0.0.1` only |
 | Max inbound message size | `1 MB` | Larger frames are rejected with the `message_too_big` protocol error |
-| Max concurrent requests | `16` | Requests beyond the cap get an immediate `Server busy` error |
+| Max concurrent requests | `64` | Requests beyond the cap get an immediate `Server busy` error |
 | Timer interval | `1 s` | `timer` event frequency |
 

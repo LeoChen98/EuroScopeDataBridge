@@ -106,7 +106,7 @@ The repository includes a WPF desktop test client at `tests/EuroScopeDataBridge.
   - Connect/disconnect to the WebSocket (default `127.0.0.1:48521`; host and port configurable), with a connection status indicator and message counter
   - Quick queries: Get Flight Plans / Get Radar Targets / Get Controllers, results shown in tables
   - Custom commands: send any JSON request (e.g. `{"type":"get_flightplans"}`)
-  - Live log panel showing all received/sent messages, with a right-click "Copy JSON" action that copies a line's full raw JSON payload to the clipboard
+  - Live log panel showing all received/sent messages, with a right-click "Copy JSON" action that copies a line's full raw JSON payload to the clipboard; the list auto-scrolls to the newest line while the scrollbar stays at the bottom
 
 **Running**: make sure EuroScope has loaded the plugin DLL and started the WebSocket server, then open `EuroscopeDataBridge.sln` in Visual Studio 2022, set `EuroScopeDataBridge.TestProject` as the startup project and run it (or run `dotnet run --project tests/EuroScopeDataBridge.TestProject`, requires the .NET 8 SDK).
 

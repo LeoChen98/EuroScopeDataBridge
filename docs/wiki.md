@@ -575,6 +575,27 @@ The response has the same shape as `subscribe` (`success` + current `events`).
 
 ---
 
+## Heartbeat (ping / pong)
+
+Application-level heartbeats are supported but **not enforced**: a client may send `ping` at any time and the server replies with `pong` immediately. Combine with the subscribed `timer` event for connection health checks.
+
+**Request example:**
+
+```json
+{ "type": "ping", "id": "hb-1" }
+```
+
+**Response example:**
+
+```json
+{ "type": "pong", "id": "hb-1" }
+```
+
+- `id` is optional; `pong` echoes the `id` carried by the `ping` (omitted when absent)
+- pings are answered inline on the IO thread and never consume a concurrent-request slot
+
+---
+
 ## Requests (client → server)
 
 ### Query

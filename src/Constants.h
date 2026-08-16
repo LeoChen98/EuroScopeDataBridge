@@ -123,6 +123,10 @@ namespace msg_type {
     constexpr auto SUBSCRIBE                     = "subscribe";
     constexpr auto UNSUBSCRIBE                   = "unsubscribe";
 
+    // Application-level heartbeat (optional, not enforced)
+    constexpr auto PING                          = "ping";
+    constexpr auto PONG                          = "pong";
+
     // Voice channel toggles
     constexpr auto TOGGLE_PRIMARY                = "toggle_primary";
     constexpr auto TOGGLE_ATIS                   = "toggle_atis";

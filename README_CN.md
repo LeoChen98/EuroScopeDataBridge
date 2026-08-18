@@ -96,7 +96,7 @@ ws.send(JSON.stringify({
 
 > **注意**：所有 Push 事件均需订阅后才推送。`subscribe` 可重复调用以追加订阅；`unsubscribe` 用于取消订阅（`data.events` 缺省或为空数组时表示取消全部订阅）。
 
-详细的 API 文档请参阅 [docs/wiki_CN.md](docs/wiki_CN.md)（中文）或 [docs/wiki.md](docs/wiki.md)（English）。API 速查手册：[docs/API_REFERENCE.md](docs/API_REFERENCE.md)。
+详细的 API 文档请参阅 [docs/wiki_CN.md](docs/wiki_CN.md)（中文）或 [docs/wiki.md](docs/wiki.md)（English）。API 速查手册：[docs/API_REFERENCE_SKILL.md](docs/API_REFERENCE_SKILL.md)。
 
 ## 测试客户端（TestProject）
 

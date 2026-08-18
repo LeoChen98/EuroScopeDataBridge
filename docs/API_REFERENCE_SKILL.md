@@ -1,9 +1,19 @@
+---
+name: edb-websocket-api
+description: 快速查阅 EuroScope Data Bridge 本地 WebSocket API（消息格式、推送事件、请求、数据结构、错误与常量），用于在其他项目中实现客户端或对接脚本。Portable quick reference for the EuroScope Data Bridge WebSocket API.
+---
+
 # EuroScope Data Bridge — API Quick Reference
 
 Condensed, portable reference for implementing clients/scripts against
 the EuroScope Data Bridge WebSocket API. Full details (including every
 field of every data structure) are in [wiki.md](wiki.md) (English) and
 [wiki_CN.md](wiki_CN.md) (中文).
+
+> This file is the skill copy distributed with the repository. When the
+> API changes, keep this file and the local
+> `.agents/skills/edb-websocket-api/SKILL.md` in sync (see the
+> `sync-docs-web` skill for the full docs-update workflow).
 
 ## Connection
 

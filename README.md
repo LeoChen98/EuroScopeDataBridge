@@ -96,7 +96,7 @@ ws.send(JSON.stringify({
 
 > **Note**: all Push events are delivered only after subscription. `subscribe` may be called repeatedly to add more event types; `unsubscribe` removes subscriptions (omit `data.events` or pass an empty array to clear all).
 
-For the full API documentation, see [docs/wiki.md](docs/wiki.md) (English) or [docs/wiki_CN.md](docs/wiki_CN.md) (中文).
+For the full API documentation, see [docs/wiki.md](docs/wiki.md) (English) or [docs/wiki_CN.md](docs/wiki_CN.md) (中文). Condensed quick reference: [docs/API_REFERENCE.md](docs/API_REFERENCE.md).
 
 ## Test client (TestProject)
 

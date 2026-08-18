@@ -1,17 +1,33 @@
 ---
 name: edb-websocket-api
-description: 快速查阅 EuroScope Data Bridge 本地 WebSocket API（消息格式、推送事件、请求、数据结构、错误与常量），用于在其他项目中实现客户端或对接脚本。Portable quick reference for the EuroScope Data Bridge WebSocket API.
+description: 面向 AI agent 的 skill——在任意项目中实现 EuroScope Data Bridge WebSocket 客户端/脚本/集成时的权威速查（消息格式、推送事件、请求、数据结构、错误与常量）。AI agent skill: authoritative quick lookup for implementing EuroScope Data Bridge WebSocket clients in any project.
 ---
 
-# EuroScope Data Bridge — API Quick Reference
+# EuroScope Data Bridge — WebSocket API Skill (AI Agent)
 
-Condensed, portable reference for implementing clients/scripts against
-the EuroScope Data Bridge WebSocket API. Full details (including every
-field of every data structure) are in [wiki.md](wiki.md) (English) and
-[wiki_CN.md](wiki_CN.md) (中文).
+This is a skill written for AI agents. When you need to implement a
+client, script or integration against the EuroScope Data Bridge
+WebSocket API, treat the sections below as the authoritative quick
+lookup. For the complete field-level documentation, consult
+[docs/wiki.md](wiki.md) (English) or [docs/wiki_CN.md](wiki_CN.md)
+(中文) — this skill is a condensed, portable slice of it.
 
-> This file is the skill copy distributed with the repository. When the
-> API changes, keep this file and the local
+**How to use this skill:**
+
+- Match request/response pairs by the `id` field; a connection may have
+  several requests in flight.
+- Push events arrive only after the client subscribes; subscriptions
+  are per-connection.
+- If a request or event below is missing a field you need, look it up
+  in the wiki **before inventing names** — the protocol only exposes
+  what the plugin serializes.
+- The **Known gaps** section documents behaviour that differs from the
+  wiki; never assume unimplemented requests work.
+- Envelope and error strings must be reproduced exactly as written
+  here.
+
+> This file is the AI-agent skill copy distributed with the repository.
+> When the API changes, keep this file and the local
 > `.agents/skills/edb-websocket-api/SKILL.md` in sync (see the
 > `sync-docs-web` skill for the full docs-update workflow).
 
